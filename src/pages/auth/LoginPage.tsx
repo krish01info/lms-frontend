@@ -51,7 +51,13 @@ export function LoginPage() {
   }, [searchParams])
 
   const handleGoogleLogin = () => {
-    const backendUrl = import.meta.env.VITE_BACKEND_URL || 'http://localhost:5000'
+    let backendUrl = import.meta.env.VITE_BACKEND_URL || 'http://localhost:5000'
+    // Normalize in case the user added /api/v1 to the VITE_BACKEND_URL variable
+    if (backendUrl.endsWith('/api/v1')) {
+      backendUrl = backendUrl.replace(/\/api\/v1\/?$/, '')
+    }
+    // Remove trailing slash if any
+    backendUrl = backendUrl.replace(/\/$/, '')
     window.location.href = `${backendUrl}/api/v1/auth/google`
   }
 
