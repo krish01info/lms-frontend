@@ -18,6 +18,7 @@ const schema = z.object({
   description: z.string().min(10, 'Description must be at least 10 characters'),
   category: z.string().optional(),
   duration: z.string().optional(),
+  videoUrl: z.string().url('Please enter a valid URL').or(z.string().length(0)).optional(),
 })
 
 export function CreateCoursePage() {
@@ -34,6 +35,7 @@ export function CreateCoursePage() {
         description: values.description + (values.duration ? ` (Duration: ${values.duration})` : ''),
         price: 0, // default price for now
         status: 'PUBLISHED', // instantly visible
+        videoUrl: values.videoUrl || null,
       })
       toast.success('Course created successfully!')
       navigate('/teacher/courses')
@@ -58,6 +60,11 @@ export function CreateCoursePage() {
               <Label htmlFor="description">Description</Label>
               <Input id="description" placeholder="Course description..." {...register('description')} />
               {errors.description && <p className="text-xs text-destructive">{errors.description.message as string}</p>}
+            </div>
+            <div className="space-y-2">
+              <Label htmlFor="videoUrl">Intro Video URL (YouTube, Vimeo, Google Drive, Cloudinary)</Label>
+              <Input id="videoUrl" placeholder="https://www.youtube.com/watch?v=..." {...register('videoUrl')} />
+              {errors.videoUrl && <p className="text-xs text-destructive">{errors.videoUrl.message as string}</p>}
             </div>
             <div className="grid gap-4 sm:grid-cols-2">
               <div className="space-y-2">
