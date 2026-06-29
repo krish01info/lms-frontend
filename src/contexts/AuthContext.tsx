@@ -71,7 +71,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     }
   }
 
-  const switchRole = (role: UserRole) => {
+  const switchRole = (_role: UserRole) => {
     // Role switching only works with mock users; with real backend this is a no-op
     console.warn('switchRole is a dev-only feature. Not supported with real backend.')
   }
