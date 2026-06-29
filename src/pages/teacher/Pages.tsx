@@ -13,36 +13,84 @@ import { useState, useEffect } from 'react'
 import { useNavigate } from 'react-router-dom'
 import api from '@/services/api'
 
+import axios from 'axios'
+
 const schema = z.object({
   title: z.string().min(3, 'Title must be at least 3 characters'),
   description: z.string().min(10, 'Description must be at least 10 characters'),
   category: z.string().optional(),
   duration: z.string().optional(),
-  videoUrl: z.string().url('Please enter a valid URL').or(z.string().length(0)).optional(),
 })
 
 export function CreateCoursePage() {
   const { register, handleSubmit, setValue, formState: { errors } } = useForm({ resolver: zodResolver(schema) })
   const navigate = useNavigate()
   const [isSubmitting, setIsSubmitting] = useState(false)
+  const [videoFile, setVideoFile] = useState<File | null>(null)
+  const [uploadProgress, setUploadProgress] = useState<number | null>(null)
+
+  const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    if (e.target.files && e.target.files[0]) {
+      setVideoFile(e.target.files[0])
+    }
+  }
 
   const onSubmit = async (values: any) => {
     setIsSubmitting(true)
+    let uploadedVideoUrl = null
+
     try {
-      // Create course in backend database
+      // If a video file was selected, upload it directly to Cloudinary first
+      if (videoFile) {
+        setUploadProgress(10)
+        
+        // 1. Get secure signature from backend
+        const { data: signRes } = await api.get('/uploads/sign-cloudinary')
+        const { signature, timestamp, cloudName, apiKey, folder } = signRes.data
+        
+        setUploadProgress(25)
+
+        // 2. Prepare FormData for Cloudinary
+        const formData = new FormData()
+        formData.append('file', videoFile)
+        formData.append('api_key', apiKey)
+        formData.append('timestamp', timestamp.toString())
+        formData.append('signature', signature)
+        formData.append('folder', folder)
+
+        // 3. Upload directly to Cloudinary with progress tracking
+        const uploadUrl = `https://api.cloudinary.com/v1_1/${cloudName}/video/upload`
+        const { data: uploadRes } = await axios.post(uploadUrl, formData, {
+          headers: { 'Content-Type': 'multipart/form-data' },
+          onUploadProgress: (progressEvent) => {
+            if (progressEvent.total) {
+              const percent = Math.round((progressEvent.loaded * 50) / progressEvent.total) + 30
+              setUploadProgress(percent)
+            }
+          }
+        })
+
+        uploadedVideoUrl = uploadRes.secure_url
+        setUploadProgress(90)
+      }
+
+      // 4. Save course details + Cloudinary URL in Supabase
       await api.post('/courses', {
         title: values.title,
         description: values.description + (values.duration ? ` (Duration: ${values.duration})` : ''),
-        price: 0, // default price for now
-        status: 'PUBLISHED', // instantly visible
-        videoUrl: values.videoUrl || null,
+        price: 0, 
+        status: 'PUBLISHED', 
+        videoUrl: uploadedVideoUrl,
       })
-      toast.success('Course created successfully!')
+
+      setUploadProgress(100)
+      toast.success('Course created successfully with intro video!')
       navigate('/teacher/courses')
     } catch (err: any) {
       toast.error(err.response?.data?.message || 'Failed to create course.')
     } finally {
       setIsSubmitting(false)
+      setUploadProgress(null)
     }
   }
 
@@ -62,9 +110,27 @@ export function CreateCoursePage() {
               {errors.description && <p className="text-xs text-destructive">{errors.description.message as string}</p>}
             </div>
             <div className="space-y-2">
-              <Label htmlFor="videoUrl">Intro Video URL (YouTube, Vimeo, Google Drive, Cloudinary)</Label>
-              <Input id="videoUrl" placeholder="https://www.youtube.com/watch?v=..." {...register('videoUrl')} />
-              {errors.videoUrl && <p className="text-xs text-destructive">{errors.videoUrl.message as string}</p>}
+              <Label htmlFor="videoFile">Course Intro Video (MP4, MOV, MKV, WEBM)</Label>
+              <Input id="videoFile" type="file" accept="video/*" onChange={handleFileChange} />
+              {videoFile && (
+                <p className="text-xs text-muted-foreground mt-1">
+                  Selected file: {videoFile.name} ({(videoFile.size / (1024 * 1024)).toFixed(2)} MB)
+                </p>
+              )}
+              {uploadProgress !== null && (
+                <div className="space-y-1 mt-2">
+                  <div className="flex justify-between text-xs font-medium">
+                    <span>Uploading intro video...</span>
+                    <span>{uploadProgress}%</span>
+                  </div>
+                  <div className="h-1.5 w-full bg-secondary rounded-full overflow-hidden">
+                    <div 
+                      className="h-full bg-primary transition-all duration-300"
+                      style={{ width: `${uploadProgress}%` }}
+                    />
+                  </div>
+                </div>
+              )}
             </div>
             <div className="grid gap-4 sm:grid-cols-2">
               <div className="space-y-2">
@@ -84,7 +150,7 @@ export function CreateCoursePage() {
               </div>
             </div>
             <Button type="submit" disabled={isSubmitting}>
-              {isSubmitting ? 'Creating...' : 'Create Course'}
+              {isSubmitting ? (videoFile ? 'Uploading & Creating...' : 'Creating...') : 'Create Course'}
             </Button>
           </form>
         </CardContent>
