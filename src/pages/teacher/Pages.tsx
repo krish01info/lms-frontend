@@ -9,32 +9,76 @@ import { Label } from '@/components/ui/label'
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
 import { toast } from 'sonner'
 
+import { useState, useEffect } from 'react'
+import { useNavigate } from 'react-router-dom'
+import api from '@/services/api'
+
 const schema = z.object({
-  title: z.string().min(3),
-  description: z.string().min(10),
-  category: z.string(),
-  duration: z.string(),
+  title: z.string().min(3, 'Title must be at least 3 characters'),
+  description: z.string().min(10, 'Description must be at least 10 characters'),
+  category: z.string().optional(),
+  duration: z.string().optional(),
 })
 
 export function CreateCoursePage() {
   const { register, handleSubmit, setValue, formState: { errors } } = useForm({ resolver: zodResolver(schema) })
+  const navigate = useNavigate()
+  const [isSubmitting, setIsSubmitting] = useState(false)
+
+  const onSubmit = async (values: any) => {
+    setIsSubmitting(true)
+    try {
+      // Create course in backend database
+      await api.post('/courses', {
+        title: values.title,
+        description: values.description + (values.duration ? ` (Duration: ${values.duration})` : ''),
+        price: 0, // default price for now
+        status: 'PUBLISHED', // instantly visible
+      })
+      toast.success('Course created successfully!')
+      navigate('/teacher/courses')
+    } catch (err: any) {
+      toast.error(err.response?.data?.message || 'Failed to create course.')
+    } finally {
+      setIsSubmitting(false)
+    }
+  }
 
   return (
     <PageShell title="Create Course" description="Set up a new course for your students">
       <Card>
         <CardContent className="p-6 space-y-5">
-          <form onSubmit={handleSubmit(() => toast.success('Course created!'))} className="space-y-5">
-            <div className="space-y-2"><Label>Course Title</Label><Input placeholder="Introduction to Data Science" {...register('title')} />{errors.title && <p className="text-xs text-destructive">Required</p>}</div>
-            <div className="space-y-2"><Label>Description</Label><Input placeholder="Course description..." {...register('description')} /></div>
+          <form onSubmit={handleSubmit(onSubmit)} className="space-y-5">
+            <div className="space-y-2">
+              <Label htmlFor="title">Course Title</Label>
+              <Input id="title" placeholder="Introduction to Data Science" {...register('title')} />
+              {errors.title && <p className="text-xs text-destructive">{errors.title.message as string}</p>}
+            </div>
+            <div className="space-y-2">
+              <Label htmlFor="description">Description</Label>
+              <Input id="description" placeholder="Course description..." {...register('description')} />
+              {errors.description && <p className="text-xs text-destructive">{errors.description.message as string}</p>}
+            </div>
             <div className="grid gap-4 sm:grid-cols-2">
-              <div className="space-y-2"><Label>Category</Label>
-                <Select onValueChange={(v) => setValue('category', v)}><SelectTrigger><SelectValue placeholder="Select" /></SelectTrigger>
-                  <SelectContent><SelectItem value="math">Mathematics</SelectItem><SelectItem value="science">Science</SelectItem><SelectItem value="tech">Technology</SelectItem></SelectContent>
+              <div className="space-y-2">
+                <Label>Category</Label>
+                <Select onValueChange={(v) => setValue('category', v)}>
+                  <SelectTrigger><SelectValue placeholder="Select" /></SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="math">Mathematics</SelectItem>
+                    <SelectItem value="science">Science</SelectItem>
+                    <SelectItem value="tech">Technology</SelectItem>
+                  </SelectContent>
                 </Select>
               </div>
-              <div className="space-y-2"><Label>Duration</Label><Input placeholder="16 weeks" {...register('duration')} /></div>
+              <div className="space-y-2">
+                <Label htmlFor="duration">Duration</Label>
+                <Input id="duration" placeholder="16 weeks" {...register('duration')} />
+              </div>
             </div>
-            <Button type="submit">Create Course</Button>
+            <Button type="submit" disabled={isSubmitting}>
+              {isSubmitting ? 'Creating...' : 'Create Course'}
+            </Button>
           </form>
         </CardContent>
       </Card>
@@ -43,15 +87,56 @@ export function CreateCoursePage() {
 }
 
 export function TeacherCoursesPage() {
+  const [courses, setCourses] = useState<any[]>([])
+  const [isLoading, setIsLoading] = useState(true)
+
+  useEffect(() => {
+    const fetchCourses = async () => {
+      try {
+        const { data } = await api.get('/courses/my')
+        setCourses(data.data.courses || [])
+      } catch {
+        toast.error('Failed to load courses.')
+      } finally {
+        setIsLoading(false)
+      }
+    }
+    fetchCourses()
+  }, [])
+
+  if (isLoading) {
+    return (
+      <PageShell title="Manage Courses" description="Loading courses...">
+        <div className="text-center py-8 text-muted-foreground">Loading your courses...</div>
+      </PageShell>
+    )
+  }
+
   return (
     <PageShell title="Manage Courses" description="View and manage your courses" searchable searchPlaceholder="Search courses...">
       <div className="grid gap-4">
-        {['Advanced Mathematics', 'Computer Science Fundamentals', 'Data Structures'].map((title, i) => (
-          <Card key={i}><CardContent className="flex items-center justify-between p-5">
-            <div><p className="font-semibold">{title}</p><p className="text-sm text-muted-foreground">{[156, 210, 98][i]} students · {[12, 14, 10][i]} modules</p></div>
-            <Button variant="outline" size="sm">Manage</Button>
-          </CardContent></Card>
-        ))}
+        {courses.length === 0 ? (
+          <div className="text-center py-8 border border-dashed rounded-2xl text-muted-foreground">
+            You haven't created any courses yet.
+          </div>
+        ) : (
+          courses.map((course) => (
+            <Card key={course.id}>
+              <CardContent className="flex items-center justify-between p-5">
+                <div>
+                  <p className="font-semibold text-lg">{course.title}</p>
+                  <p className="text-sm text-muted-foreground">
+                    {course.description || 'No description provided.'}
+                  </p>
+                  <p className="text-xs text-primary mt-1 font-medium">
+                    {course.enrollmentCount || 0} students enrolled · {course.lessonCount || 0} modules
+                  </p>
+                </div>
+                <Button variant="outline" size="sm">Manage</Button>
+              </CardContent>
+            </Card>
+          ))
+        )}
       </div>
     </PageShell>
   )

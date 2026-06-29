@@ -5,16 +5,31 @@ import { PageHeader } from '@/components/common/PageHeader'
 import { StatCard } from '@/components/common/StatCard'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { mockCourses, weeklyProgressData } from '@/constants/mockData'
+import { useState, useEffect } from 'react'
+import api from '@/services/api'
 import { useAuth } from '@/contexts/AuthContext'
 
 export function TeacherDashboard() {
   const { user } = useAuth()
+  const [coursesCount, setCoursesCount] = useState(0)
+
+  useEffect(() => {
+    const fetchCoursesCount = async () => {
+      try {
+        const { data } = await api.get('/courses/my')
+        setCoursesCount(data.data.courses?.length || 0)
+      } catch (err) {
+        // fallback
+      }
+    }
+    fetchCoursesCount()
+  }, [])
 
   return (
     <div className="space-y-6">
       <PageHeader title={`Good morning, ${user?.name?.split(' ')[0]}!`} description="Here's your teaching overview for today." />
       <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
-        <StatCard label="Active Courses" value={mockCourses.length} icon={BookOpen} />
+        <StatCard label="Active Courses" value={coursesCount} icon={BookOpen} />
         <StatCard label="Total Students" value="498" change="+12 this week" trend="up" icon={Users} />
         <StatCard label="Pending Grading" value="23" icon={ClipboardList} iconClassName="bg-amber-500/10" />
         <StatCard label="Avg. Performance" value="87%" trend="up" change="+3%" icon={TrendingUp} iconClassName="bg-emerald-500/10" />
