@@ -116,6 +116,7 @@ export function CreateCoursePage() {
       await api.post('/courses', {
         title: values.title,
         description: values.description,
+        category: values.category,
         price: values.price ? parseFloat(values.price) : 0,
         status: 'PUBLISHED',
         videoUrl,
