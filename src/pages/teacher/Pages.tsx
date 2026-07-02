@@ -66,7 +66,7 @@ export function CreateCoursePage() {
   }
 
   const uploadToCloudinary = async (file: File, type: 'video' | 'image' | 'raw') => {
-    const { data: signRes } = await api.get('/uploads/sign-cloudinary')
+    const { data: signRes } = await api.get(`/uploads/sign-cloudinary?type=${type}`)
     const { signature, timestamp, cloudName, apiKey, folder } = signRes.data
 
     const formData = new FormData()
@@ -95,18 +95,28 @@ export function CreateCoursePage() {
     let thumbnailUrl = null
 
     try {
-      // Upload thumbnail if selected
+      // Upload thumbnail if selected (non-blocking — course still creates if this fails)
       if (thumbnailFile) {
-        setUploadStage('Uploading thumbnail...')
-        setUploadProgress(0)
-        thumbnailUrl = await uploadToCloudinary(thumbnailFile, 'image')
+        try {
+          setUploadStage('Uploading thumbnail...')
+          setUploadProgress(0)
+          thumbnailUrl = await uploadToCloudinary(thumbnailFile, 'image')
+        } catch (uploadErr: any) {
+          console.error('Thumbnail upload failed:', uploadErr?.response?.data || uploadErr.message)
+          toast.warning('Thumbnail upload failed — course will be created without it.')
+        }
       }
 
-      // Upload video if selected
+      // Upload video if selected (non-blocking — course still creates if this fails)
       if (videoFile) {
-        setUploadStage('Uploading intro video...')
-        setUploadProgress(0)
-        videoUrl = await uploadToCloudinary(videoFile, 'video')
+        try {
+          setUploadStage('Uploading intro video...')
+          setUploadProgress(0)
+          videoUrl = await uploadToCloudinary(videoFile, 'video')
+        } catch (uploadErr: any) {
+          console.error('Video upload failed:', uploadErr?.response?.data || uploadErr.message)
+          toast.warning('Video upload failed — course will be created without it.')
+        }
       }
 
       // Save course in database
@@ -126,13 +136,14 @@ export function CreateCoursePage() {
       toast.success('Course created successfully!')
       navigate('/teacher/courses')
     } catch (err: any) {
-      console.error('Create course error:', err)
+      console.error('Create course error:', err?.response?.data || err.message)
       toast.error(err.response?.data?.message || err.message || 'Failed to create course.')
     } finally {
       setIsSubmitting(false)
       setUploadProgress(null)
       setUploadStage('')
     }
+
   }
 
   return (
