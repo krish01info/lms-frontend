@@ -19,3 +19,18 @@ export function transformCourse(backendCourse: any) {
             backendCourse.status === 'DRAFT' ? 'upcoming' : 'active',
   }
 }
+
+// Transforms backend lesson shape → frontend Lesson shape
+export function transformLesson(backendLesson: any) {
+  return {
+    id: backendLesson.id,
+    title: backendLesson.title,
+    description: backendLesson.description || '',
+    type: backendLesson.type || 'VIDEO',
+    duration: backendLesson.duration || null,
+    order: backendLesson.order ?? 0,
+    isPreview: backendLesson.isPreview ?? false,
+    videoUrl: backendLesson.videoUrl || null,
+    content: backendLesson.content || null,
+  }
+}

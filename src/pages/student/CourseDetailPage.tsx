@@ -1,24 +1,64 @@
 import { useParams } from 'react-router-dom'
 import { motion } from 'framer-motion'
+import { useQuery } from '@tanstack/react-query'
 import { BookOpen, Download, FileText, MessageSquare, Play, Star, Users } from 'lucide-react'
 import { Breadcrumbs } from '@/components/common/Breadcrumbs'
+import { EmptyState } from '@/components/common/EmptyState'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Progress } from '@/components/ui/progress'
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
-import { mockAssignments, mockCourses } from '@/constants/mockData'
-
-const modules = [
-  { id: 1, title: 'Introduction to Calculus', lessons: 5, completed: 5 },
-  { id: 2, title: 'Derivatives & Applications', lessons: 8, completed: 6 },
-  { id: 3, title: 'Integration Techniques', lessons: 7, completed: 3 },
-  { id: 4, title: 'Differential Equations', lessons: 6, completed: 0 },
-]
+import { mockAssignments } from '@/constants/mockData'
+import api from '@/services/api'
+import { transformCourse, transformLesson } from '@/utils/transformers'
 
 export function CourseDetailPage() {
   const { id } = useParams()
-  const course = mockCourses.find((c) => c.id === id) ?? mockCourses[0]
+
+  const {
+    data: course,
+    isLoading: courseLoading,
+    isError: courseError,
+  } = useQuery({
+    queryKey: ['course', id],
+    queryFn: async () => {
+      const res = await api.get(`/courses/${id}`)
+      return transformCourse(res.data.data.course)
+    },
+    enabled: !!id,
+  })
+
+  const { data: lessons, isLoading: lessonsLoading } = useQuery({
+    queryKey: ['course-lessons', id],
+    queryFn: async () => {
+      const res = await api.get(`/courses/${id}/lessons`)
+      return res.data.data.lessons.map(transformLesson)
+    },
+    enabled: !!id,
+  })
+
+  if (courseLoading) {
+    return (
+      <div className="space-y-6">
+        <div className="h-64 rounded-3xl bg-muted animate-pulse sm:h-80" />
+        <div className="grid gap-6 lg:grid-cols-3">
+          <div className="lg:col-span-2 h-96 rounded-xl bg-muted animate-pulse" />
+          <div className="h-96 rounded-xl bg-muted animate-pulse" />
+        </div>
+      </div>
+    )
+  }
+
+  if (courseError || !course) {
+    return (
+      <EmptyState
+        icon={BookOpen}
+        title="Failed to load course"
+        description="Could not load this course. Please try again."
+      />
+    )
+  }
 
   return (
     <div className="space-y-6">
@@ -42,27 +82,49 @@ export function CourseDetailPage() {
         <div className="lg:col-span-2">
           <Tabs defaultValue="modules">
             <TabsList>
-              <TabsTrigger value="modules">Modules</TabsTrigger>
+              <TabsTrigger value="modules">Lessons</TabsTrigger>
               <TabsTrigger value="resources">Resources</TabsTrigger>
               <TabsTrigger value="assignments">Assignments</TabsTrigger>
               <TabsTrigger value="discussion">Discussion</TabsTrigger>
             </TabsList>
+
             <TabsContent value="modules" className="space-y-3">
-              {modules.map((mod) => (
-                <Card key={mod.id} className="hover:shadow-md transition-shadow">
-                  <CardContent className="flex items-center gap-4 p-4">
-                    <div className="flex h-12 w-12 items-center justify-center rounded-2xl bg-primary/10">
-                      <Play className="h-5 w-5 text-primary" />
-                    </div>
-                    <div className="flex-1">
-                      <p className="font-medium">{mod.title}</p>
-                      <p className="text-sm text-muted-foreground">{mod.completed}/{mod.lessons} lessons completed</p>
-                      <Progress value={(mod.completed / mod.lessons) * 100} className="mt-2" />
-                    </div>
-                  </CardContent>
-                </Card>
-              ))}
+              {lessonsLoading && (
+                <div className="space-y-3">
+                  {[1, 2, 3].map((i) => (
+                    <div key={i} className="h-20 rounded-xl bg-muted animate-pulse" />
+                  ))}
+                </div>
+              )}
+
+              {!lessonsLoading && (!lessons || lessons.length === 0) && (
+                <EmptyState
+                  icon={Play}
+                  title="No lessons yet"
+                  description="This course doesn't have any lessons published yet."
+                />
+              )}
+
+              {!lessonsLoading &&
+                lessons?.map((lesson: any) => (
+                  <Card key={lesson.id} className="hover:shadow-md transition-shadow">
+                    <CardContent className="flex items-center gap-4 p-4">
+                      <div className="flex h-12 w-12 items-center justify-center rounded-2xl bg-primary/10">
+                        <Play className="h-5 w-5 text-primary" />
+                      </div>
+                      <div className="flex-1">
+                        <p className="font-medium">{lesson.title}</p>
+                        <p className="text-sm text-muted-foreground">
+                          {lesson.description || `Lesson ${lesson.order}`}
+                          {lesson.duration ? ` · ${lesson.duration} min` : ''}
+                        </p>
+                      </div>
+                      {lesson.isPreview && <Badge variant="secondary">Preview</Badge>}
+                    </CardContent>
+                  </Card>
+                ))}
             </TabsContent>
+
             <TabsContent value="resources" className="space-y-3">
               {['Chapter 7 Notes.pdf', 'Practice Problems.pdf', 'Formula Sheet.pdf'].map((file) => (
                 <Card key={file}>
@@ -76,6 +138,7 @@ export function CourseDetailPage() {
                 </Card>
               ))}
             </TabsContent>
+
             <TabsContent value="assignments" className="space-y-3">
               {mockAssignments.filter((a) => a.course === course.title).map((a) => (
                 <Card key={a.id}>
@@ -89,6 +152,7 @@ export function CourseDetailPage() {
                 </Card>
               ))}
             </TabsContent>
+
             <TabsContent value="discussion" className="space-y-3">
               {['Question about integration by parts', 'Help with problem 15', 'Study group for midterm'].map((topic) => (
                 <Card key={topic} className="cursor-pointer hover:shadow-md transition-shadow">
@@ -109,7 +173,7 @@ export function CourseDetailPage() {
               <img src={course.instructorAvatar} alt={course.instructor} className="h-14 w-14 rounded-2xl object-cover" />
               <div>
                 <p className="font-semibold">{course.instructor}</p>
-                <p className="text-sm text-muted-foreground">Department Head</p>
+                <p className="text-sm text-muted-foreground">Instructor</p>
               </div>
             </CardContent>
           </Card>
