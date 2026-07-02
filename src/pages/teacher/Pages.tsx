@@ -66,7 +66,7 @@ export function CreateCoursePage() {
   }
 
   const uploadToCloudinary = async (file: File, type: 'video' | 'image' | 'raw') => {
-    const { data: signRes } = await api.get('/uploads/sign-cloudinary')
+    const { data: signRes } = await api.get(`/uploads/sign-cloudinary?type=${type}`)
     const { signature, timestamp, cloudName, apiKey, folder } = signRes.data
 
     const formData = new FormData()
