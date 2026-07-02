@@ -7,9 +7,12 @@ import {
   Mail,
   MapPin,
   Trophy,
+  User as UserIcon,
 } from 'lucide-react'
+import { useQuery } from '@tanstack/react-query'
 import { PageHeader } from '@/components/common/PageHeader'
 import { StatCard } from '@/components/common/StatCard'
+import { EmptyState } from '@/components/common/EmptyState'
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
@@ -17,7 +20,8 @@ import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Progress } from '@/components/ui/progress'
 import { Separator } from '@/components/ui/separator'
 import { mockCourses } from '@/constants/mockData'
-import { useAuth } from '@/contexts/AuthContext'
+import api from '@/services/api'
+import type { User } from '@/types'
 
 const achievements = [
   { title: 'Dean\'s List', description: 'Top 15% GPA for 2 semesters', icon: Trophy, earned: true },
@@ -28,10 +32,49 @@ const achievements = [
 ]
 
 export function ProfilePage() {
-  const { user } = useAuth()
+  // Fetch live profile from real backend instead of relying only on cached localStorage user
+  const { data: user, isLoading, isError } = useQuery<User>({
+    queryKey: ['current-user'],
+    queryFn: async () => {
+      const res = await api.get('/users/me')
+      // NOTE: assumes GET /users/me returns { data: { user: {...} } },
+      // matching the shape of /auth/login and /auth/register.
+      // If the raw Postman response was { data: {...} } instead, change this to:
+      //   return res.data.data
+      return res.data.data.user
+    },
+  })
+
   const avgProgress = Math.round(
     mockCourses.reduce((acc, c) => acc + c.progress, 0) / mockCourses.length
   )
+
+  if (isLoading) {
+    return (
+      <div className="space-y-6">
+        <PageHeader title="Profile" description="Your academic profile and achievements" />
+        <div className="h-64 rounded-xl bg-muted animate-pulse" />
+        <div className="grid gap-4 sm:grid-cols-4">
+          {[1, 2, 3, 4].map((i) => (
+            <div key={i} className="h-24 rounded-xl bg-muted animate-pulse" />
+          ))}
+        </div>
+      </div>
+    )
+  }
+
+  if (isError || !user) {
+    return (
+      <div className="space-y-6">
+        <PageHeader title="Profile" description="Your academic profile and achievements" />
+        <EmptyState
+          icon={UserIcon}
+          title="Failed to load profile"
+          description="Could not connect to the server. Please try again."
+        />
+      </div>
+    )
+  }
 
   return (
     <div className="space-y-6">
