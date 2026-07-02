@@ -19,8 +19,8 @@ import { Button } from '@/components/ui/button'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Progress } from '@/components/ui/progress'
 import { Separator } from '@/components/ui/separator'
-import { mockCourses } from '@/constants/mockData'
 import api from '@/services/api'
+import { transformCourse } from '@/utils/transformers'
 import type { User } from '@/types'
 
 const achievements = [
@@ -32,22 +32,39 @@ const achievements = [
 ]
 
 export function ProfilePage() {
-  // Fetch live profile from real backend instead of relying only on cached localStorage user
-  const { data: user, isLoading, isError } = useQuery<User>({
+  // Live profile data
+  const {
+    data: user,
+    isLoading: isUserLoading,
+    isError: isUserError,
+  } = useQuery<User>({
     queryKey: ['current-user'],
     queryFn: async () => {
       const res = await api.get('/users/me')
-      // NOTE: assumes GET /users/me returns { data: { user: {...} } },
-      // matching the shape of /auth/login and /auth/register.
-      // If the raw Postman response was { data: {...} } instead, change this to:
-      //   return res.data.data
       return res.data.data.user
     },
   })
 
-  const avgProgress = Math.round(
-    mockCourses.reduce((acc, c) => acc + c.progress, 0) / mockCourses.length
-  )
+  // Live enrolled courses — same queryKey as CoursesPage so the cache is shared
+  const {
+    data: courseData,
+    isLoading: isCoursesLoading,
+    isError: isCoursesError,
+  } = useQuery({
+    queryKey: ['enrolled-courses'],
+    queryFn: async () => {
+      const res = await api.get('/courses/enrolled')
+      return res.data.data.courses.map(transformCourse)
+    },
+  })
+
+  const courses = courseData || []
+  const isLoading = isUserLoading || isCoursesLoading
+  const isError = isUserError || isCoursesError
+
+  const avgProgress = courses.length
+    ? Math.round(courses.reduce((acc: number, c: any) => acc + c.progress, 0) / courses.length)
+    : 0
 
   if (isLoading) {
     return (
@@ -127,7 +144,7 @@ export function ProfilePage() {
 
       <div className="grid gap-4 sm:grid-cols-4">
         <StatCard label="GPA" value="3.85" trend="up" change="Top 15%" icon={Award} />
-        <StatCard label="Courses" value={mockCourses.length} icon={BookOpen} iconClassName="bg-secondary/10" />
+        <StatCard label="Courses" value={courses.length} icon={BookOpen} iconClassName="bg-secondary/10" />
         <StatCard label="Attendance" value="92%" trend="up" icon={Calendar} iconClassName="bg-emerald-500/10" />
         <StatCard label="Avg. Progress" value={`${avgProgress}%`} icon={Trophy} />
       </div>
@@ -138,22 +155,28 @@ export function ProfilePage() {
             <CardTitle className="text-base">Enrolled Courses</CardTitle>
           </CardHeader>
           <CardContent className="space-y-4">
-            {mockCourses.map((course) => (
-              <div key={course.id} className="flex items-center gap-4">
-                <img
-                  src={course.image}
-                  alt={course.title}
-                  className="h-12 w-12 rounded-xl object-cover"
-                />
-                <div className="flex-1 space-y-1.5">
-                  <div className="flex justify-between text-sm">
-                    <span className="font-medium line-clamp-1">{course.title}</span>
-                    <span className="text-muted-foreground shrink-0 ml-2">{course.progress}%</span>
+            {courses.length === 0 ? (
+              <p className="text-sm text-muted-foreground py-4 text-center">
+                No enrolled courses yet.
+              </p>
+            ) : (
+              courses.map((course: any) => (
+                <div key={course.id} className="flex items-center gap-4">
+                  <img
+                    src={course.image}
+                    alt={course.title}
+                    className="h-12 w-12 rounded-xl object-cover"
+                  />
+                  <div className="flex-1 space-y-1.5">
+                    <div className="flex justify-between text-sm">
+                      <span className="font-medium line-clamp-1">{course.title}</span>
+                      <span className="text-muted-foreground shrink-0 ml-2">{course.progress}%</span>
+                    </div>
+                    <Progress value={course.progress} className="h-1.5" />
                   </div>
-                  <Progress value={course.progress} className="h-1.5" />
                 </div>
-              </div>
-            ))}
+              ))
+            )}
           </CardContent>
         </Card>
 
