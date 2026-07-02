@@ -30,7 +30,7 @@ export function CoursesPage() {
   const courses = data || []
 
   const filtered = useMemo(() => {
-    return courses.filter((course) => {
+    return courses.filter((course: any) => {
       const matchesSearch =
         course.title.toLowerCase().includes(search.toLowerCase()) ||
         course.instructor.toLowerCase().includes(search.toLowerCase())
@@ -112,7 +112,7 @@ export function CoursesPage() {
           animate={{ opacity: 1 }}
           className="grid gap-6 sm:grid-cols-2 xl:grid-cols-3"
         >
-          {filtered.map((course) => (
+          {filtered.map((course: any) => (
             <CourseCard
               key={course.id}
               course={course}
