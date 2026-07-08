@@ -77,9 +77,9 @@ export function ProfilePage() {
   const isError = isUserError || isCoursesError
 
   // Map courseId -> percentage from real progress data
-  const progressByCourseId = new Map(
-    progress.map((p: any) => [p.courseId, p.percentage])
-  )
+const progressByCourseId = new Map<string, number>(
+  progress.map((p: any) => [p.courseId, p.percentage] as [string, number])
+)
 
   const avgProgress = progress.length
     ? Math.round(progress.reduce((acc: number, c: any) => acc + c.percentage, 0) / progress.length)
@@ -180,7 +180,7 @@ export function ProfilePage() {
               </p>
             ) : (
               courses.map((course: any) => {
-                const coursePercentage = progressByCourseId.get(course.id) ?? 0
+                const coursePercentage: number = progressByCourseId.get(course.id) ?? 0
                 return (
                   <div key={course.id} className="flex items-center gap-4">
                     <img
