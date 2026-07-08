@@ -76,6 +76,11 @@ export function ProfilePage() {
   const isLoading = isUserLoading || isCoursesLoading || isProgressLoading
   const isError = isUserError || isCoursesError
 
+  // Map courseId -> percentage from real progress data
+  const progressByCourseId = new Map(
+    progress.map((p: any) => [p.courseId, p.percentage])
+  )
+
   const avgProgress = progress.length
     ? Math.round(progress.reduce((acc: number, c: any) => acc + c.percentage, 0) / progress.length)
     : 0
@@ -174,22 +179,25 @@ export function ProfilePage() {
                 No enrolled courses yet.
               </p>
             ) : (
-              courses.map((course: any) => (
-                <div key={course.id} className="flex items-center gap-4">
-                  <img
-                    src={course.image}
-                    alt={course.title}
-                    className="h-12 w-12 rounded-xl object-cover"
-                  />
-                  <div className="flex-1 space-y-1.5">
-                    <div className="flex justify-between text-sm">
-                      <span className="font-medium line-clamp-1">{course.title}</span>
-                      <span className="text-muted-foreground shrink-0 ml-2">{course.progress}%</span>
+              courses.map((course: any) => {
+                const coursePercentage = progressByCourseId.get(course.id) ?? 0
+                return (
+                  <div key={course.id} className="flex items-center gap-4">
+                    <img
+                      src={course.image}
+                      alt={course.title}
+                      className="h-12 w-12 rounded-xl object-cover"
+                    />
+                    <div className="flex-1 space-y-1.5">
+                      <div className="flex justify-between text-sm">
+                        <span className="font-medium line-clamp-1">{course.title}</span>
+                        <span className="text-muted-foreground shrink-0 ml-2">{coursePercentage}%</span>
+                      </div>
+                      <Progress value={coursePercentage} className="h-1.5" />
                     </div>
-                    <Progress value={course.progress} className="h-1.5" />
                   </div>
-                </div>
-              ))
+                )
+              })
             )}
           </CardContent>
         </Card>
