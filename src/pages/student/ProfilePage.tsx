@@ -23,6 +23,7 @@ import api from '@/services/api'
 import { transformCourse } from '@/utils/transformers'
 import type { User } from '@/types'
 
+// NOTE: sample data — no backend model for achievements yet
 const achievements = [
   { title: 'Dean\'s List', description: 'Top 15% GPA for 2 semesters', icon: Trophy, earned: true },
   { title: 'Perfect Attendance', description: '100% attendance in English', icon: Calendar, earned: true },
@@ -58,12 +59,25 @@ export function ProfilePage() {
     },
   })
 
+  // Live progress data — same queryKey as ProgressPage so the cache is shared
+  const {
+    data: progressData,
+    isLoading: isProgressLoading,
+  } = useQuery({
+    queryKey: ['progress-my'],
+    queryFn: async () => {
+      const res = await api.get('/progress/my')
+      return res.data.data.progress
+    },
+  })
+
   const courses = courseData || []
-  const isLoading = isUserLoading || isCoursesLoading
+  const progress = progressData || []
+  const isLoading = isUserLoading || isCoursesLoading || isProgressLoading
   const isError = isUserError || isCoursesError
 
-  const avgProgress = courses.length
-    ? Math.round(courses.reduce((acc: number, c: any) => acc + c.progress, 0) / courses.length)
+  const avgProgress = progress.length
+    ? Math.round(progress.reduce((acc: number, c: any) => acc + c.percentage, 0) / progress.length)
     : 0
 
   if (isLoading) {
@@ -143,9 +157,9 @@ export function ProfilePage() {
       </Card>
 
       <div className="grid gap-4 sm:grid-cols-4">
-        <StatCard label="GPA" value="3.85" trend="up" change="Top 15%" icon={Award} />
+        <StatCard label="GPA" value="3.85" trend="up" change="Sample data" icon={Award} />
         <StatCard label="Courses" value={courses.length} icon={BookOpen} iconClassName="bg-secondary/10" />
-        <StatCard label="Attendance" value="92%" trend="up" icon={Calendar} iconClassName="bg-emerald-500/10" />
+        <StatCard label="Attendance" value="92%" trend="up" change="Sample data" icon={Calendar} iconClassName="bg-emerald-500/10" />
         <StatCard label="Avg. Progress" value={`${avgProgress}%`} icon={Trophy} />
       </div>
 
@@ -182,7 +196,7 @@ export function ProfilePage() {
 
         <Card>
           <CardHeader>
-            <CardTitle className="text-base">Achievements</CardTitle>
+            <CardTitle className="text-base">Achievements (sample)</CardTitle>
           </CardHeader>
           <CardContent className="space-y-3">
             {achievements.map((achievement, i) => (
