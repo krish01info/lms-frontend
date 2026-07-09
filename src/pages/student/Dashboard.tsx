@@ -1,4 +1,5 @@
 import { motion } from 'framer-motion'
+import { useQuery } from '@tanstack/react-query'
 import {
   Award,
   BookOpen,
@@ -21,10 +22,11 @@ import { Progress } from '@/components/ui/progress'
 import {
   mockAssignments,
   mockCalendarEvents,
-  mockCourses,
   weeklyProgressData,
 } from '@/constants/mockData'
 import { useAuth } from '@/contexts/AuthContext'
+import { transformCourse } from '@/utils/transformers'
+import api from '@/services/api'
 
 const quickActions = [
   { label: 'My Courses', href: '/student/courses', icon: BookOpen },
@@ -33,6 +35,7 @@ const quickActions = [
   { label: 'Calendar', href: '/student/calendar', icon: Calendar },
 ]
 
+// NOTE: sample data — no backend model for activity log yet
 const recentActivity = [
   { action: 'Submitted Wave Motion Lab Report', time: '2 hours ago', type: 'assignment' },
   { action: 'Completed Shakespeare Analysis Quiz', time: 'Yesterday', type: 'quiz' },
@@ -40,8 +43,39 @@ const recentActivity = [
   { action: 'Downloaded Physics Notes', time: '3 days ago', type: 'resource' },
 ]
 
+// NOTE: sample data — no backend model for announcements yet
+const announcements = [
+  { title: 'Science Fair Registration Open', date: 'Jun 25' },
+  { title: 'Mid-term Exam Schedule Released', date: 'Jun 24' },
+  { title: 'New Course: Data Science 101', date: 'Jun 23' },
+]
+
 export function StudentDashboard() {
   const { user } = useAuth()
+
+  // Live enrolled courses — shares cache with CoursesPage/ProfilePage
+  const { data: courseData, isLoading: isCoursesLoading } = useQuery({
+    queryKey: ['enrolled-courses'],
+    queryFn: async () => {
+      const res = await api.get('/courses/enrolled')
+      return res.data.data.courses.map(transformCourse)
+    },
+  })
+
+  // Live progress — shares cache with ProgressPage/ProfilePage/CertificatesPage
+  const { data: progressData, isLoading: isProgressLoading } = useQuery({
+    queryKey: ['progress-my'],
+    queryFn: async () => {
+      const res = await api.get('/progress/my')
+      return res.data.data.progress
+    },
+  })
+
+  const courses = courseData || []
+  const progress = progressData || []
+  const isLoading = isCoursesLoading || isProgressLoading
+
+  // NOTE: assignments blocked — teammate's /assignments endpoint returns 404, still mock for now
   const todayClasses = mockCalendarEvents.filter((e) => e.type === 'class').slice(0, 3)
   const dueAssignments = mockAssignments.filter((a) => a.status === 'pending' || a.status === 'overdue')
 
@@ -61,7 +95,7 @@ export function StudentDashboard() {
           <p className="text-sm text-white/80">{user?.grade}</p>
           <h2 className="mt-1 text-2xl font-bold sm:text-3xl">Keep up the great work!</h2>
           <p className="mt-2 max-w-md text-white/80">
-            You have {dueAssignments.length} assignments due this week and {todayClasses.length} classes today.
+            You have {dueAssignments.length} assignments due this week (sample) and {todayClasses.length} classes today (sample).
           </p>
           <div className="mt-6 flex flex-wrap gap-3">
             <Button variant="glass" asChild>
@@ -77,19 +111,24 @@ export function StudentDashboard() {
       </motion.div>
 
       <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
-        <StatCard label="Attendance" value="92%" change="+2% this month" trend="up" icon={Users} />
-        <StatCard label="Current GPA" value="3.85" change="Top 15%" trend="up" icon={Award} iconClassName="bg-emerald-500/10" />
-        <StatCard label="Courses Active" value={mockCourses.length} icon={BookOpen} iconClassName="bg-secondary/10" />
-        <StatCard label="Learning Hours" value="24.5h" change="This week" trend="neutral" icon={Clock} />
+        <StatCard label="Attendance" value="92%" change="Sample data" trend="up" icon={Users} />
+        <StatCard label="Current GPA" value="3.85" change="Sample data" trend="up" icon={Award} iconClassName="bg-emerald-500/10" />
+        <StatCard
+          label="Courses Active"
+          value={isCoursesLoading ? '—' : courses.length}
+          icon={BookOpen}
+          iconClassName="bg-secondary/10"
+        />
+        <StatCard label="Learning Hours" value="24.5h" change="This week (sample)" trend="neutral" icon={Clock} />
       </div>
 
       <div className="grid gap-6 lg:grid-cols-3">
         <div className="lg:col-span-2 space-y-6">
-          <ChartCard title="Weekly Learning Progress" data={weeklyProgressData} dataKey="hours" type="area" />
+          <ChartCard title="Weekly Learning Progress (sample)" data={weeklyProgressData} dataKey="hours" type="area" />
 
           <Card>
             <CardHeader className="flex flex-row items-center justify-between">
-              <CardTitle>Assignments Due</CardTitle>
+              <CardTitle>Assignments Due (sample)</CardTitle>
               <Button variant="ghost" size="sm" asChild>
                 <Link to="/student/assignments">View all</Link>
               </Button>
@@ -105,7 +144,7 @@ export function StudentDashboard() {
         <div className="space-y-6">
           <Card>
             <CardHeader>
-              <CardTitle className="text-base">Today&apos;s Classes</CardTitle>
+              <CardTitle className="text-base">Today&apos;s Classes (sample)</CardTitle>
             </CardHeader>
             <CardContent className="space-y-4">
               {todayClasses.map((cls) => (
@@ -125,15 +164,30 @@ export function StudentDashboard() {
               <CardTitle className="text-base">Course Progress</CardTitle>
             </CardHeader>
             <CardContent className="space-y-4">
-              {mockCourses.slice(0, 3).map((course) => (
-                <div key={course.id} className="space-y-2">
-                  <div className="flex justify-between text-sm">
-                    <span className="font-medium line-clamp-1">{course.title}</span>
-                    <span className="text-muted-foreground">{course.progress}%</span>
-                  </div>
-                  <Progress value={course.progress} />
+              {isLoading && (
+                <div className="space-y-3">
+                  {[1, 2, 3].map((i) => (
+                    <div key={i} className="h-10 rounded-lg bg-muted animate-pulse" />
+                  ))}
                 </div>
-              ))}
+              )}
+
+              {!isLoading && progress.length === 0 && (
+                <p className="text-sm text-muted-foreground py-2 text-center">
+                  No progress yet. Enroll in a course to get started.
+                </p>
+              )}
+
+              {!isLoading &&
+                progress.slice(0, 3).map((course: any) => (
+                  <div key={course.courseId} className="space-y-2">
+                    <div className="flex justify-between text-sm">
+                      <span className="font-medium line-clamp-1">{course.courseTitle}</span>
+                      <span className="text-muted-foreground">{course.percentage}%</span>
+                    </div>
+                    <Progress value={course.percentage} />
+                  </div>
+                ))}
             </CardContent>
           </Card>
 
@@ -160,14 +214,10 @@ export function StudentDashboard() {
       <div className="grid gap-6 lg:grid-cols-2">
         <Card>
           <CardHeader>
-            <CardTitle className="text-base">Announcements</CardTitle>
+            <CardTitle className="text-base">Announcements (sample)</CardTitle>
           </CardHeader>
           <CardContent className="space-y-3">
-            {[
-              { title: 'Science Fair Registration Open', date: 'Jun 25' },
-              { title: 'Mid-term Exam Schedule Released', date: 'Jun 24' },
-              { title: 'New Course: Data Science 101', date: 'Jun 23' },
-            ].map((item, i) => (
+            {announcements.map((item, i) => (
               <div key={i} className="flex items-start justify-between rounded-2xl border border-border p-4">
                 <div>
                   <p className="text-sm font-medium">{item.title}</p>
@@ -181,7 +231,7 @@ export function StudentDashboard() {
 
         <Card>
           <CardHeader>
-            <CardTitle className="text-base">Recent Activity</CardTitle>
+            <CardTitle className="text-base">Recent Activity (sample)</CardTitle>
           </CardHeader>
           <CardContent className="space-y-3">
             {recentActivity.map((item, i) => (
