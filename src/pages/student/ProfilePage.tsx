@@ -71,19 +71,33 @@ export function ProfilePage() {
     },
   })
 
+  // Live attendance data — same queryKey as AttendancePage, shares cache
+  const {
+    data: attendanceData,
+    isLoading: isAttendanceLoading,
+  } = useQuery({
+    queryKey: ['attendance-my'],
+    queryFn: async () => {
+      const res = await api.get('/attendance/my')
+      return res.data.data
+    },
+  })
+
   const courses = courseData || []
   const progress = progressData || []
-  const isLoading = isUserLoading || isCoursesLoading || isProgressLoading
+  const isLoading = isUserLoading || isCoursesLoading || isProgressLoading || isAttendanceLoading
   const isError = isUserError || isCoursesError
 
   // Map courseId -> percentage from real progress data
-const progressByCourseId = new Map<string, number>(
-  progress.map((p: any) => [p.courseId, p.percentage] as [string, number])
-)
+  const progressByCourseId = new Map<string, number>(
+    progress.map((p: any) => [p.courseId, p.percentage] as [string, number])
+  )
 
   const avgProgress = progress.length
     ? Math.round(progress.reduce((acc: number, c: any) => acc + c.percentage, 0) / progress.length)
     : 0
+
+  const attendancePercentage = attendanceData?.overallPercentage ?? 0
 
   if (isLoading) {
     return (
@@ -164,7 +178,7 @@ const progressByCourseId = new Map<string, number>(
       <div className="grid gap-4 sm:grid-cols-4">
         <StatCard label="GPA" value="3.85" trend="up" change="Sample data" icon={Award} />
         <StatCard label="Courses" value={courses.length} icon={BookOpen} iconClassName="bg-secondary/10" />
-        <StatCard label="Attendance" value="92%" trend="up" change="Sample data" icon={Calendar} iconClassName="bg-emerald-500/10" />
+        <StatCard label="Attendance" value={`${attendancePercentage}%`} icon={Calendar} iconClassName="bg-emerald-500/10" />
         <StatCard label="Avg. Progress" value={`${avgProgress}%`} icon={Trophy} />
       </div>
 
