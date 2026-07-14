@@ -5,7 +5,6 @@ import { format } from 'date-fns'
 import {
   CheckCircle,
   CreditCard,
-  Download,
   FileText,
   Lock,
   Smartphone,
