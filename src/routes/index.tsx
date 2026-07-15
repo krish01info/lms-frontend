@@ -32,6 +32,7 @@ import { MessagesPage } from '@/pages/student/MessagesPage'
 import { NotificationsPage } from '@/pages/student/NotificationsPage'
 import { ProfilePage } from '@/pages/student/ProfilePage'
 import { SettingsPage } from '@/pages/student/SettingsPage'
+import { AITutorPage } from '@/pages/student/AITutorPage'
 
 // Teacher
 import { TeacherDashboard } from '@/pages/teacher/Dashboard'
@@ -113,6 +114,7 @@ export const router = createBrowserRouter([
       { path: '/student/discussion', element: withSuspense(<DiscussionPage />) },
       { path: '/student/resources', element: withSuspense(<ResourcesPage />) },
       { path: '/student/certificates', element: withSuspense(<CertificatesPage />) },
+      { path: '/student/ai-tutor', element: withSuspense(<AITutorPage />) },
       { path: '/student/messages', element: withSuspense(<MessagesPage />) },
       { path: '/student/notifications', element: withSuspense(<NotificationsPage />) },
       { path: '/student/profile', element: withSuspense(<ProfilePage />) },
