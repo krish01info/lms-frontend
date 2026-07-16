@@ -28,10 +28,8 @@ type TutorMessage = {
   timestamp: string
 }
 
-const subjects = ['Mathematics', 'Science', 'English', 'History']
-
 const suggestedPrompts = [
-  'Explain quadratic equations with an example',
+  'Explain deep learning',
   'Quiz me on today\'s science topic',
   'Summarize my lesson in simple points',
   'Help me plan a 30-minute study session',
@@ -100,7 +98,6 @@ function TutorMessageBubble({ message }: { message: TutorMessage }) {
 
 export function AITutorPage() {
   const { user } = useAuth()
-  const [activeSubject, setActiveSubject] = useState(subjects[0])
   const [message, setMessage] = useState('')
   const [messages, setMessages] = useState<TutorMessage[]>(initialMessages)
   const [isThinking, setIsThinking] = useState(false)
@@ -129,7 +126,8 @@ export function AITutorPage() {
       const tutorMessage: TutorMessage = {
         id: `tutor-${Date.now()}`,
         role: 'tutor',
-        content: `Great question. For ${activeSubject}, I would start by identifying the key idea, then work through one example, and finally test your understanding with a short practice question. Backend AI responses can replace this placeholder later.`,
+        content:
+          'Great question. I would start by identifying the key idea, then work through one example, and finally test your understanding with a short practice question. Backend AI responses can replace this placeholder later.',
         timestamp: 'Now',
       }
       setMessages((current) => [...current, tutorMessage])
@@ -148,27 +146,6 @@ export function AITutorPage() {
 
       <div className="grid gap-6 xl:grid-cols-[320px_1fr]">
         <div className="space-y-6">
-          <Card>
-            <CardHeader>
-              <CardTitle className="text-base">Study Focus</CardTitle>
-            </CardHeader>
-            <CardContent className="space-y-3">
-              {subjects.map((subject) => (
-                <button
-                  key={subject}
-                  onClick={() => setActiveSubject(subject)}
-                  className={cn(
-                    'flex w-full items-center justify-between rounded-2xl border border-border px-4 py-3 text-left text-sm transition-colors hover:bg-muted/60',
-                    activeSubject === subject && 'border-primary/40 bg-primary/10 text-primary'
-                  )}
-                >
-                  <span className="font-medium">{subject}</span>
-                  {activeSubject === subject && <Sparkles className="h-4 w-4" />}
-                </button>
-              ))}
-            </CardContent>
-          </Card>
-
           <Card>
             <CardHeader>
               <CardTitle className="text-base">Tutor Tools</CardTitle>
@@ -194,17 +171,20 @@ export function AITutorPage() {
                 <Clock className="h-4 w-4 text-primary" />
                 Quick Prompts
               </CardTitle>
+              <p className="text-sm text-muted-foreground">
+                Start with one tap, then refine your question in chat.
+              </p>
             </CardHeader>
-            <CardContent className="space-y-2">
+            <CardContent className="space-y-3">
               {suggestedPrompts.map((prompt) => (
-                <Button
+                <button
                   key={prompt}
-                  variant="ghost"
-                  className="h-auto w-full justify-start rounded-2xl px-3 py-2 text-left text-sm"
+                  className="flex w-full items-center gap-3 rounded-2xl border border-border bg-muted/40 px-4 py-3 text-left text-sm font-medium transition-colors hover:border-primary/40 hover:bg-primary/10 hover:text-primary"
                   onClick={() => sendMessage(prompt)}
                 >
+                  <Sparkles className="h-4 w-4 shrink-0 text-primary" />
                   {prompt}
-                </Button>
+                </button>
               ))}
             </CardContent>
           </Card>
@@ -221,7 +201,7 @@ export function AITutorPage() {
                 </Avatar>
                 <div>
                   <p className="font-medium">LearnLMS Tutor</p>
-                  <p className="text-xs text-muted-foreground">{activeSubject} mode</p>
+                  <p className="text-xs text-muted-foreground">Learning assistant</p>
                 </div>
               </div>
               <Badge variant="outline">Preview</Badge>
