@@ -67,7 +67,15 @@ export function CreateCoursePage() {
 
   const uploadToCloudinary = async (file: File, type: 'video' | 'image' | 'raw') => {
     const { data: signRes } = await api.get(`/uploads/sign-cloudinary?type=${type}`)
-    const { signature, timestamp, cloudName, apiKey, folder } = signRes.data
+    const { signature, timestamp, folder } = signRes.data
+
+    // Use backend response first, fallback to frontend env vars
+    const cloudName = signRes.data.cloudName || import.meta.env.VITE_CLOUDINARY_CLOUD_NAME
+    const apiKey    = signRes.data.apiKey    || import.meta.env.VITE_CLOUDINARY_API_KEY
+
+    if (!cloudName || !apiKey) {
+      throw new Error('Cloudinary is not configured. Please set CLOUDINARY_CLOUD_NAME and CLOUDINARY_API_KEY.')
+    }
 
     const formData = new FormData()
     formData.append('file', file)
@@ -306,20 +314,99 @@ export function CreateCoursePage() {
 export function TeacherCoursesPage() {
   const [courses, setCourses] = useState<any[]>([])
   const [isLoading, setIsLoading] = useState(true)
+  const navigate = useNavigate()
 
-  useEffect(() => {
-    const fetchCourses = async () => {
-      try {
-        const { data } = await api.get('/courses/my')
-        setCourses(data.data.courses || [])
-      } catch {
-        toast.error('Failed to load courses.')
-      } finally {
-        setIsLoading(false)
-      }
+  // Edit dialog state
+  const [editCourse, setEditCourse] = useState<any | null>(null)
+  const [editForm, setEditForm] = useState({ title: '', description: '', price: '', status: '' })
+  const [isEditing, setIsEditing] = useState(false)
+
+  // Delete dialog state
+  const [deleteCourseId, setDeleteCourseId] = useState<string | null>(null)
+  const [isDeleting, setIsDeleting] = useState(false)
+
+  // Status toggle loading
+  const [statusLoading, setStatusLoading] = useState<string | null>(null)
+
+  const fetchCourses = async () => {
+    try {
+      const { data } = await api.get('/courses/my')
+      setCourses(data.data.courses || [])
+    } catch {
+      toast.error('Failed to load courses.')
+    } finally {
+      setIsLoading(false)
     }
-    fetchCourses()
-  }, [])
+  }
+
+  useEffect(() => { fetchCourses() }, [])
+
+  // ── Open edit dialog pre-filled ──────────────────────────────────────────────
+  const openEdit = (course: any) => {
+    setEditCourse(course)
+    setEditForm({
+      title: course.title || '',
+      description: course.description || '',
+      price: course.price?.toString() || '0',
+      status: course.status || 'DRAFT',
+    })
+  }
+
+  const handleEditSave = async () => {
+    if (!editCourse) return
+    setIsEditing(true)
+    try {
+      const { data } = await api.patch(`/courses/${editCourse.id}`, {
+        title: editForm.title,
+        description: editForm.description,
+        price: parseFloat(editForm.price) || 0,
+        status: editForm.status,
+      })
+      setCourses(prev => prev.map(c => c.id === editCourse.id ? data.data.course : c))
+      toast.success('Course updated successfully!')
+      setEditCourse(null)
+    } catch (err: any) {
+      toast.error(err.response?.data?.message || 'Failed to update course.')
+    } finally {
+      setIsEditing(false)
+    }
+  }
+
+  // ── Status toggle (quick publish/archive/draft) ───────────────────────────────
+  const handleStatusChange = async (courseId: string, newStatus: string) => {
+    setStatusLoading(courseId)
+    try {
+      const { data } = await api.patch(`/courses/${courseId}/status`, { status: newStatus })
+      setCourses(prev => prev.map(c => c.id === courseId ? { ...c, status: data.data.course.status } : c))
+      toast.success(`Course marked as ${newStatus.toLowerCase()}.`)
+    } catch (err: any) {
+      toast.error(err.response?.data?.message || 'Failed to update status.')
+    } finally {
+      setStatusLoading(null)
+    }
+  }
+
+  // ── Delete ────────────────────────────────────────────────────────────────────
+  const handleDelete = async () => {
+    if (!deleteCourseId) return
+    setIsDeleting(true)
+    try {
+      await api.delete(`/courses/${deleteCourseId}`)
+      setCourses(prev => prev.filter(c => c.id !== deleteCourseId))
+      toast.success('Course deleted.')
+      setDeleteCourseId(null)
+    } catch (err: any) {
+      toast.error(err.response?.data?.message || 'Failed to delete course.')
+    } finally {
+      setIsDeleting(false)
+    }
+  }
+
+  const statusColors: Record<string, string> = {
+    PUBLISHED: 'bg-emerald-500/10 text-emerald-600 border-emerald-500/20',
+    DRAFT: 'bg-amber-500/10 text-amber-600 border-amber-500/20',
+    ARCHIVED: 'bg-muted text-muted-foreground border-border',
+  }
 
   if (isLoading) {
     return (
@@ -330,34 +417,205 @@ export function TeacherCoursesPage() {
   }
 
   return (
-    <PageShell title="Manage Courses" description="View and manage your courses" searchable searchPlaceholder="Search courses...">
+    <PageShell
+      title="Manage Courses"
+      description="View, edit, publish, or delete your courses"
+      actions={<Button onClick={() => navigate('/teacher/create-course')}>+ New Course</Button>}
+    >
       <div className="grid gap-4">
         {courses.length === 0 ? (
-          <div className="text-center py-8 border border-dashed rounded-2xl text-muted-foreground">
-            You haven't created any courses yet.
+          <div className="text-center py-16 border border-dashed rounded-2xl text-muted-foreground">
+            <p className="text-lg font-medium">No courses yet</p>
+            <p className="text-sm mt-1">Create your first course to get started.</p>
+            <Button className="mt-4" onClick={() => navigate('/teacher/create-course')}>+ Create Course</Button>
           </div>
         ) : (
           courses.map((course) => (
-            <Card key={course.id}>
-              <CardContent className="flex items-center justify-between p-5">
-                <div>
-                  <p className="font-semibold text-lg">{course.title}</p>
-                  <p className="text-sm text-muted-foreground">
-                    {course.description || 'No description provided.'}
-                  </p>
-                  <p className="text-xs text-primary mt-1 font-medium">
-                    {course.enrollmentCount || 0} students enrolled · {course.lessonCount || 0} modules
-                  </p>
+            <Card key={course.id} className="overflow-hidden">
+              <CardContent className="p-0">
+                <div className="flex gap-4 p-5">
+                  {/* Thumbnail */}
+                  {course.thumbnail ? (
+                    <img
+                      src={course.thumbnail}
+                      alt={course.title}
+                      className="h-20 w-32 rounded-xl object-cover flex-shrink-0"
+                    />
+                  ) : (
+                    <div className="h-20 w-32 rounded-xl bg-muted flex items-center justify-center flex-shrink-0 text-muted-foreground text-xs">
+                      No image
+                    </div>
+                  )}
+
+                  {/* Info */}
+                  <div className="flex-1 min-w-0">
+                    <div className="flex items-start justify-between gap-2 flex-wrap">
+                      <div>
+                        <p className="font-semibold text-base leading-snug">{course.title}</p>
+                        <p className="text-sm text-muted-foreground mt-0.5 line-clamp-2">
+                          {course.description || 'No description provided.'}
+                        </p>
+                        <div className="flex items-center gap-3 mt-2">
+                          <span className={`text-xs px-2.5 py-0.5 rounded-full border font-medium ${statusColors[course.status] || statusColors.DRAFT}`}>
+                            {course.status}
+                          </span>
+                          <span className="text-xs text-muted-foreground">
+                            {course.enrollmentCount || 0} students · {course.lessonCount || 0} lessons
+                          </span>
+                          {course.price > 0 && (
+                            <span className="text-xs font-semibold text-primary">₹{course.price}</span>
+                          )}
+                        </div>
+                      </div>
+
+                      {/* Actions */}
+                      <div className="flex items-center gap-2 flex-shrink-0">
+                        {/* Status quick-toggle */}
+                        <Select
+                          value={course.status}
+                          onValueChange={(val) => handleStatusChange(course.id, val)}
+                          disabled={statusLoading === course.id}
+                        >
+                          <SelectTrigger className="h-8 text-xs w-[120px]">
+                            <SelectValue />
+                          </SelectTrigger>
+                          <SelectContent>
+                            <SelectItem value="DRAFT">Draft</SelectItem>
+                            <SelectItem value="PUBLISHED">Published</SelectItem>
+                            <SelectItem value="ARCHIVED">Archived</SelectItem>
+                          </SelectContent>
+                        </Select>
+
+                        {/* Edit button */}
+                        <Button
+                          variant="outline"
+                          size="sm"
+                          onClick={() => openEdit(course)}
+                        >
+                          Edit
+                        </Button>
+
+                        {/* Delete button */}
+                        <Button
+                          variant="destructive"
+                          size="sm"
+                          onClick={() => setDeleteCourseId(course.id)}
+                        >
+                          Delete
+                        </Button>
+                      </div>
+                    </div>
+                  </div>
                 </div>
-                <Button variant="outline" size="sm">Manage</Button>
               </CardContent>
             </Card>
           ))
         )}
       </div>
+
+      {/* ── Edit Dialog ──────────────────────────────────────────────────────── */}
+      {editCourse && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm p-4">
+          <div className="bg-background rounded-2xl shadow-2xl w-full max-w-lg p-6 space-y-5">
+            <div className="flex items-center justify-between">
+              <h2 className="text-lg font-bold">Edit Course</h2>
+              <button onClick={() => setEditCourse(null)} className="text-muted-foreground hover:text-foreground transition-colors">
+                <X className="h-5 w-5" />
+              </button>
+            </div>
+
+            <div className="space-y-4">
+              <div className="space-y-2">
+                <Label htmlFor="edit-title">Course Title</Label>
+                <Input
+                  id="edit-title"
+                  value={editForm.title}
+                  onChange={e => setEditForm(f => ({ ...f, title: e.target.value }))}
+                  placeholder="Course title"
+                />
+              </div>
+
+              <div className="space-y-2">
+                <Label htmlFor="edit-description">Description</Label>
+                <Textarea
+                  id="edit-description"
+                  rows={4}
+                  value={editForm.description}
+                  onChange={e => setEditForm(f => ({ ...f, description: e.target.value }))}
+                  placeholder="Course description"
+                />
+              </div>
+
+              <div className="grid grid-cols-2 gap-4">
+                <div className="space-y-2">
+                  <Label htmlFor="edit-price">Price (₹)</Label>
+                  <Input
+                    id="edit-price"
+                    type="number"
+                    value={editForm.price}
+                    onChange={e => setEditForm(f => ({ ...f, price: e.target.value }))}
+                    placeholder="0 for free"
+                  />
+                </div>
+                <div className="space-y-2">
+                  <Label>Status</Label>
+                  <Select value={editForm.status} onValueChange={val => setEditForm(f => ({ ...f, status: val }))}>
+                    <SelectTrigger><SelectValue /></SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="DRAFT">Draft</SelectItem>
+                      <SelectItem value="PUBLISHED">Published</SelectItem>
+                      <SelectItem value="ARCHIVED">Archived</SelectItem>
+                    </SelectContent>
+                  </Select>
+                </div>
+              </div>
+            </div>
+
+            <div className="flex gap-3 pt-2">
+              <Button onClick={handleEditSave} disabled={isEditing} className="flex-1">
+                {isEditing ? 'Saving...' : 'Save Changes'}
+              </Button>
+              <Button variant="outline" onClick={() => setEditCourse(null)} className="flex-1">
+                Cancel
+              </Button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* ── Delete Confirm Dialog ─────────────────────────────────────────────── */}
+      {deleteCourseId && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm p-4">
+          <div className="bg-background rounded-2xl shadow-2xl w-full max-w-sm p-6 space-y-4 text-center">
+            <div className="text-4xl">⚠️</div>
+            <h2 className="text-lg font-bold">Delete Course?</h2>
+            <p className="text-sm text-muted-foreground">
+              This will permanently delete the course and all its lessons. This action cannot be undone.
+            </p>
+            <div className="flex gap-3 pt-2">
+              <Button
+                variant="destructive"
+                disabled={isDeleting}
+                onClick={handleDelete}
+                className="flex-1"
+              >
+                {isDeleting ? 'Deleting...' : 'Yes, Delete'}
+              </Button>
+              <Button
+                variant="outline"
+                onClick={() => setDeleteCourseId(null)}
+                className="flex-1"
+              >
+                Cancel
+              </Button>
+            </div>
+          </div>
+        </div>
+      )}
     </PageShell>
   )
 }
+
 
 export function TeacherAssignmentsPage() {
   return (
