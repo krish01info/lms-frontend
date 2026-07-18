@@ -67,7 +67,15 @@ export function CreateCoursePage() {
 
   const uploadToCloudinary = async (file: File, type: 'video' | 'image' | 'raw') => {
     const { data: signRes } = await api.get(`/uploads/sign-cloudinary?type=${type}`)
-    const { signature, timestamp, cloudName, apiKey, folder } = signRes.data
+    const { signature, timestamp, folder } = signRes.data
+
+    // Use backend response first, fallback to frontend env vars
+    const cloudName = signRes.data.cloudName || import.meta.env.VITE_CLOUDINARY_CLOUD_NAME
+    const apiKey    = signRes.data.apiKey    || import.meta.env.VITE_CLOUDINARY_API_KEY
+
+    if (!cloudName || !apiKey) {
+      throw new Error('Cloudinary is not configured. Please set CLOUDINARY_CLOUD_NAME and CLOUDINARY_API_KEY.')
+    }
 
     const formData = new FormData()
     formData.append('file', file)
