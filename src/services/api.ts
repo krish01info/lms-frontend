@@ -1,15 +1,12 @@
 import axios from 'axios'
 
-// In production: VITE_API_URL=https://your-backend.vercel.app/api/v1
-// In local dev:  falls back to /api/v1 (proxied by Vite to localhost:5000)
 const api = axios.create({
   baseURL: import.meta.env.VITE_API_URL || '/api/v1',
   timeout: 15000,
   headers: { 'Content-Type': 'application/json' },
-  withCredentials: true, // needed for httpOnly refresh-token cookie
+  withCredentials: true,
 })
 
-// Attach JWT access token to every request
 api.interceptors.request.use((config) => {
   const token = localStorage.getItem('learnflow_access_token')
   if (token) {
@@ -18,7 +15,6 @@ api.interceptors.request.use((config) => {
   return config
 })
 
-// Auto-refresh on 401 — try /auth/refresh before logging out
 let isRefreshing = false
 let failedQueue: Array<{ resolve: (v: string) => void; reject: (e: any) => void }> = []
 
@@ -35,7 +31,6 @@ api.interceptors.response.use(
   async (error) => {
     const originalRequest = error.config
 
-    // If not 401, or already retried, or it's the refresh call itself — reject
     if (
       error.response?.status !== 401 ||
       originalRequest._retry ||
@@ -45,7 +40,6 @@ api.interceptors.response.use(
     }
 
     if (isRefreshing) {
-      // Queue this request until the refresh completes
       return new Promise((resolve, reject) => {
         failedQueue.push({ resolve, reject })
       }).then((token) => {
@@ -58,7 +52,6 @@ api.interceptors.response.use(
     isRefreshing = true
 
     try {
-      // Try to get new access token using httpOnly refresh cookie
       const { data } = await api.post('/auth/refresh')
       const newToken = data.data?.accessToken
       if (!newToken) throw new Error('No token in refresh response')

@@ -8,23 +8,62 @@ import { SearchBar } from '@/components/common/SearchBar'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import { Tabs, TabsList, TabsTrigger } from '@/components/ui/tabs'
-import { mockCourses } from '@/constants/mockData'
+import { useQuery } from '@tanstack/react-query'
+import api from '@/services/api'
+import { transformCourse } from '@/utils/transformers'
 
-const categories = ['All', 'Mathematics', 'Science', 'Humanities', 'Technology']
+const categories = ['All', 'Mathematics', 'Science', 'Humanities', 'Technology', 'General']
 
 export function CoursesPage() {
   const [search, setSearch] = useState('')
   const [category, setCategory] = useState('All')
 
+  // Fetch enrolled courses from real backend
+  const { data, isLoading, isError } = useQuery({
+    queryKey: ['enrolled-courses'],
+    queryFn: async () => {
+      const res = await api.get('/courses/enrolled')
+      return res.data.data.courses.map(transformCourse)
+    }
+  })
+
+  const courses = data || []
+
   const filtered = useMemo(() => {
-    return mockCourses.filter((course) => {
+    return courses.filter((course: any) => {
       const matchesSearch =
         course.title.toLowerCase().includes(search.toLowerCase()) ||
         course.instructor.toLowerCase().includes(search.toLowerCase())
       const matchesCategory = category === 'All' || course.category === category
       return matchesSearch && matchesCategory
     })
-  }, [search, category])
+  }, [courses, search, category])
+
+  if (isLoading) {
+    return (
+      <div className="space-y-6">
+        <PageHeader title="My Courses" description="Browse and continue your enrolled courses" />
+        <div className="grid gap-6 sm:grid-cols-2 xl:grid-cols-3">
+          {[1,2,3].map(i => (
+            <div key={i} className="h-64 rounded-xl bg-muted animate-pulse" />
+          ))}
+        </div>
+      </div>
+    )
+  }
+
+  if (isError) {
+    return (
+      <div className="space-y-6">
+        <PageHeader title="My Courses" description="Browse and continue your enrolled courses" />
+        <EmptyState
+          icon={BookOpen}
+          title="Failed to load courses"
+          description="Could not connect to the server. Please try again."
+        />
+      </div>
+    )
+  }
 
   return (
     <div className="space-y-6">
@@ -34,7 +73,7 @@ export function CoursesPage() {
       >
         <Badge variant="secondary" className="gap-1">
           <BookOpen className="h-3.5 w-3.5" />
-          {mockCourses.length} enrolled
+          {courses.length} enrolled
         </Badge>
       </PageHeader>
 
@@ -60,7 +99,7 @@ export function CoursesPage() {
         <EmptyState
           icon={Filter}
           title="No courses found"
-          description="Try adjusting your search or filter to find what you're looking for."
+          description="You haven't enrolled in any courses yet, or no courses match your filter."
           actionLabel="Clear filters"
           onAction={() => {
             setSearch('')
@@ -73,7 +112,7 @@ export function CoursesPage() {
           animate={{ opacity: 1 }}
           className="grid gap-6 sm:grid-cols-2 xl:grid-cols-3"
         >
-          {filtered.map((course) => (
+          {filtered.map((course: any) => (
             <CourseCard
               key={course.id}
               course={course}

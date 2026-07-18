@@ -1,10 +1,12 @@
 import { useState } from 'react'
 import { motion } from 'framer-motion'
+import { useQuery } from '@tanstack/react-query'
 import { format, parseISO } from 'date-fns'
 import { CalendarDays, CheckCircle, Send } from 'lucide-react'
 import { ChartCard, CircularProgress } from '@/components/common/Charts'
 import { PageHeader } from '@/components/common/PageHeader'
 import { StatCard } from '@/components/common/StatCard'
+import { EmptyState } from '@/components/common/EmptyState'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
@@ -17,7 +19,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from '@/components/ui/select'
-import { attendanceBySubject, mockAttendance } from '@/constants/mockData'
+import api from '@/services/api'
 
 const statusStyles = {
   present: { label: 'Present', variant: 'success' as const },
@@ -26,21 +28,30 @@ const statusStyles = {
   leave: { label: 'Leave', variant: 'secondary' as const },
 }
 
-const chartData = attendanceBySubject.map((s) => ({
-  name: s.subject,
-  value: s.percentage,
-}))
-
 export function AttendancePage() {
   const [leaveForm, setLeaveForm] = useState({ from: '', to: '', reason: '', subject: '' })
   const [submitted, setSubmitted] = useState(false)
 
-  const overallAttendance = Math.round(
-    attendanceBySubject.reduce((acc, s) => acc + s.percentage, 0) / attendanceBySubject.length
-  )
-  const presentDays = mockAttendance.filter((r) => r.status === 'present').length
-  const absentDays = mockAttendance.filter((r) => r.status === 'absent').length
+  const { data, isLoading, isError } = useQuery({
+    queryKey: ['attendance-my'],
+    queryFn: async () => {
+      const res = await api.get('/attendance/my')
+      return res.data.data
+    },
+  })
 
+  const records = data?.records || []
+  const summary = data?.summary || []
+  const overallAttendance = data?.overallPercentage ?? 0
+
+  const chartData = summary.map((s: any) => ({
+    name: s.courseTitle,
+    value: s.percentage,
+  }))
+
+  const presentDays = records.filter((r: any) => r.status === 'present').length
+
+  // NOTE: Leave Request has no backend yet — form is UI-only, not persisted
   const handleSubmitLeave = (e: React.FormEvent) => {
     e.preventDefault()
     setSubmitted(true)
@@ -50,14 +61,45 @@ export function AttendancePage() {
     }, 3000)
   }
 
+  if (isLoading) {
+    return (
+      <div className="space-y-6">
+        <PageHeader title="Attendance" description="Monitor your attendance and request leave" />
+        <div className="grid gap-4 sm:grid-cols-3">
+          {[1, 2, 3].map((i) => (
+            <div key={i} className="h-24 rounded-xl bg-muted animate-pulse" />
+          ))}
+        </div>
+      </div>
+    )
+  }
+
+  if (isError) {
+    return (
+      <div className="space-y-6">
+        <PageHeader title="Attendance" description="Monitor your attendance and request leave" />
+        <EmptyState
+          icon={CalendarDays}
+          title="Failed to load attendance"
+          description="Could not connect to the server. Please try again."
+        />
+      </div>
+    )
+  }
+
   return (
     <div className="space-y-6">
       <PageHeader title="Attendance" description="Monitor your attendance and request leave" />
 
       <div className="grid gap-4 sm:grid-cols-3">
-        <StatCard label="Present Days" value={presentDays} icon={CheckCircle} iconClassName="bg-emerald-500/10" />
-        <StatCard label="Absent Days" value={absentDays} trend="down" icon={CalendarDays} iconClassName="bg-destructive/10" />
-        <StatCard label="This Month" value={`${overallAttendance}%`} change="+2% vs last month" trend="up" icon={CalendarDays} />
+        <StatCard label="Active Days" value={presentDays} icon={CheckCircle} iconClassName="bg-emerald-500/10" />
+        <StatCard
+          label="Courses Tracked"
+          value={summary.length}
+          icon={CalendarDays}
+          iconClassName="bg-secondary/10"
+        />
+        <StatCard label="Overall" value={`${overallAttendance}%`} icon={CalendarDays} />
       </div>
 
       <div className="grid gap-6 lg:grid-cols-3">
@@ -68,19 +110,31 @@ export function AttendancePage() {
           <CardContent className="flex flex-col items-center gap-4 pb-8">
             <CircularProgress value={overallAttendance} size={140} label="Attendance" />
             <p className="text-sm text-muted-foreground text-center max-w-xs">
-              You need at least 75% attendance to be eligible for exams.
+              Based on days you completed at least one lesson, out of days lessons were made available.
             </p>
           </CardContent>
         </Card>
 
         <div className="lg:col-span-2">
-          <ChartCard
-            title="Attendance by Subject"
-            data={chartData}
-            type="bar"
-            dataKey="value"
-            xKey="name"
-          />
+          {chartData.length === 0 ? (
+            <Card className="h-full flex items-center justify-center">
+              <CardContent className="py-12">
+                <EmptyState
+                  icon={CalendarDays}
+                  title="No attendance data yet"
+                  description="Complete lessons in your enrolled courses to build your attendance record."
+                />
+              </CardContent>
+            </Card>
+          ) : (
+            <ChartCard
+              title="Attendance by Course"
+              data={chartData}
+              type="bar"
+              dataKey="value"
+              xKey="name"
+            />
+          )}
         </div>
       </div>
 
@@ -90,40 +144,46 @@ export function AttendancePage() {
             <CardTitle className="text-base">Attendance History</CardTitle>
           </CardHeader>
           <CardContent className="overflow-x-auto">
-            <table className="w-full text-sm">
-              <thead>
-                <tr className="border-b border-border text-left text-muted-foreground">
-                  <th className="pb-3 font-medium">Date</th>
-                  <th className="pb-3 font-medium">Subject</th>
-                  <th className="pb-3 font-medium">Status</th>
-                </tr>
-              </thead>
-              <tbody>
-                {mockAttendance.map((record) => {
-                  const style = statusStyles[record.status]
-                  return (
-                    <motion.tr
-                      key={record.id}
-                      initial={{ opacity: 0 }}
-                      animate={{ opacity: 1 }}
-                      className="border-b border-border/50 last:border-0"
-                    >
-                      <td className="py-3">{format(parseISO(record.date), 'MMM d, yyyy')}</td>
-                      <td className="py-3">{record.subject}</td>
-                      <td className="py-3">
-                        <Badge variant={style.variant}>{style.label}</Badge>
-                      </td>
-                    </motion.tr>
-                  )
-                })}
-              </tbody>
-            </table>
+            {records.length === 0 ? (
+              <p className="text-sm text-muted-foreground py-4 text-center">
+                No attendance records yet.
+              </p>
+            ) : (
+              <table className="w-full text-sm">
+                <thead>
+                  <tr className="border-b border-border text-left text-muted-foreground">
+                    <th className="pb-3 font-medium">Date</th>
+                    <th className="pb-3 font-medium">Subject</th>
+                    <th className="pb-3 font-medium">Status</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {records.map((record: any, i: number) => {
+                    const style = statusStyles[record.status as keyof typeof statusStyles]
+                    return (
+                      <motion.tr
+                        key={`${record.date}-${record.subject}-${i}`}
+                        initial={{ opacity: 0 }}
+                        animate={{ opacity: 1 }}
+                        className="border-b border-border/50 last:border-0"
+                      >
+                        <td className="py-3">{format(parseISO(record.date), 'MMM d, yyyy')}</td>
+                        <td className="py-3">{record.subject}</td>
+                        <td className="py-3">
+                          <Badge variant={style.variant}>{style.label}</Badge>
+                        </td>
+                      </motion.tr>
+                    )
+                  })}
+                </tbody>
+              </table>
+            )}
           </CardContent>
         </Card>
 
         <Card>
           <CardHeader>
-            <CardTitle className="text-base">Leave Request</CardTitle>
+            <CardTitle className="text-base">Leave Request (sample)</CardTitle>
           </CardHeader>
           <CardContent>
             <form onSubmit={handleSubmitLeave} className="space-y-4">
@@ -137,9 +197,9 @@ export function AttendancePage() {
                     <SelectValue placeholder="Select subject" />
                   </SelectTrigger>
                   <SelectContent>
-                    {attendanceBySubject.map((s) => (
-                      <SelectItem key={s.subject} value={s.subject}>
-                        {s.subject}
+                    {summary.map((s: any) => (
+                      <SelectItem key={s.courseId} value={s.courseTitle}>
+                        {s.courseTitle}
                       </SelectItem>
                     ))}
                   </SelectContent>

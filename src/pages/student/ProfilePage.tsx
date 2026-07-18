@@ -7,18 +7,23 @@ import {
   Mail,
   MapPin,
   Trophy,
+  User as UserIcon,
 } from 'lucide-react'
+import { useQuery } from '@tanstack/react-query'
 import { PageHeader } from '@/components/common/PageHeader'
 import { StatCard } from '@/components/common/StatCard'
+import { EmptyState } from '@/components/common/EmptyState'
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Progress } from '@/components/ui/progress'
 import { Separator } from '@/components/ui/separator'
-import { mockCourses } from '@/constants/mockData'
-import { useAuth } from '@/contexts/AuthContext'
+import api from '@/services/api'
+import { transformCourse } from '@/utils/transformers'
+import type { User } from '@/types'
 
+// NOTE: sample data — no backend model for achievements yet
 const achievements = [
   { title: 'Dean\'s List', description: 'Top 15% GPA for 2 semesters', icon: Trophy, earned: true },
   { title: 'Perfect Attendance', description: '100% attendance in English', icon: Calendar, earned: true },
@@ -28,10 +33,98 @@ const achievements = [
 ]
 
 export function ProfilePage() {
-  const { user } = useAuth()
-  const avgProgress = Math.round(
-    mockCourses.reduce((acc, c) => acc + c.progress, 0) / mockCourses.length
+  // Live profile data
+  const {
+    data: user,
+    isLoading: isUserLoading,
+    isError: isUserError,
+  } = useQuery<User>({
+    queryKey: ['current-user'],
+    queryFn: async () => {
+      const res = await api.get('/users/me')
+      return res.data.data.user
+    },
+  })
+
+  // Live enrolled courses — same queryKey as CoursesPage so the cache is shared
+  const {
+    data: courseData,
+    isLoading: isCoursesLoading,
+    isError: isCoursesError,
+  } = useQuery({
+    queryKey: ['enrolled-courses'],
+    queryFn: async () => {
+      const res = await api.get('/courses/enrolled')
+      return res.data.data.courses.map(transformCourse)
+    },
+  })
+
+  // Live progress data — same queryKey as ProgressPage so the cache is shared
+  const {
+    data: progressData,
+    isLoading: isProgressLoading,
+  } = useQuery({
+    queryKey: ['progress-my'],
+    queryFn: async () => {
+      const res = await api.get('/progress/my')
+      return res.data.data.progress
+    },
+  })
+
+  // Live attendance data — same queryKey as AttendancePage, shares cache
+  const {
+    data: attendanceData,
+    isLoading: isAttendanceLoading,
+  } = useQuery({
+    queryKey: ['attendance-my'],
+    queryFn: async () => {
+      const res = await api.get('/attendance/my')
+      return res.data.data
+    },
+  })
+
+  const courses = courseData || []
+  const progress = progressData || []
+  const isLoading = isUserLoading || isCoursesLoading || isProgressLoading || isAttendanceLoading
+  const isError = isUserError || isCoursesError
+
+  // Map courseId -> percentage from real progress data
+  const progressByCourseId = new Map<string, number>(
+    progress.map((p: any) => [p.courseId, p.percentage] as [string, number])
   )
+
+  const avgProgress = progress.length
+    ? Math.round(progress.reduce((acc: number, c: any) => acc + c.percentage, 0) / progress.length)
+    : 0
+
+  const attendancePercentage = attendanceData?.overallPercentage ?? 0
+
+  if (isLoading) {
+    return (
+      <div className="space-y-6">
+        <PageHeader title="Profile" description="Your academic profile and achievements" />
+        <div className="h-64 rounded-xl bg-muted animate-pulse" />
+        <div className="grid gap-4 sm:grid-cols-4">
+          {[1, 2, 3, 4].map((i) => (
+            <div key={i} className="h-24 rounded-xl bg-muted animate-pulse" />
+          ))}
+        </div>
+      </div>
+    )
+  }
+
+  if (isError || !user) {
+    return (
+      <div className="space-y-6">
+        <PageHeader title="Profile" description="Your academic profile and achievements" />
+        <EmptyState
+          icon={UserIcon}
+          title="Failed to load profile"
+          description="Could not connect to the server. Please try again."
+        />
+      </div>
+    )
+  }
 
   return (
     <div className="space-y-6">
@@ -83,9 +176,9 @@ export function ProfilePage() {
       </Card>
 
       <div className="grid gap-4 sm:grid-cols-4">
-        <StatCard label="GPA" value="3.85" trend="up" change="Top 15%" icon={Award} />
-        <StatCard label="Courses" value={mockCourses.length} icon={BookOpen} iconClassName="bg-secondary/10" />
-        <StatCard label="Attendance" value="92%" trend="up" icon={Calendar} iconClassName="bg-emerald-500/10" />
+        <StatCard label="GPA" value="3.85" trend="up" change="Sample data" icon={Award} />
+        <StatCard label="Courses" value={courses.length} icon={BookOpen} iconClassName="bg-secondary/10" />
+        <StatCard label="Attendance" value={`${attendancePercentage}%`} icon={Calendar} iconClassName="bg-emerald-500/10" />
         <StatCard label="Avg. Progress" value={`${avgProgress}%`} icon={Trophy} />
       </div>
 
@@ -95,28 +188,37 @@ export function ProfilePage() {
             <CardTitle className="text-base">Enrolled Courses</CardTitle>
           </CardHeader>
           <CardContent className="space-y-4">
-            {mockCourses.map((course) => (
-              <div key={course.id} className="flex items-center gap-4">
-                <img
-                  src={course.image}
-                  alt={course.title}
-                  className="h-12 w-12 rounded-xl object-cover"
-                />
-                <div className="flex-1 space-y-1.5">
-                  <div className="flex justify-between text-sm">
-                    <span className="font-medium line-clamp-1">{course.title}</span>
-                    <span className="text-muted-foreground shrink-0 ml-2">{course.progress}%</span>
+            {courses.length === 0 ? (
+              <p className="text-sm text-muted-foreground py-4 text-center">
+                No enrolled courses yet.
+              </p>
+            ) : (
+              courses.map((course: any) => {
+                const coursePercentage: number = progressByCourseId.get(course.id) ?? 0
+                return (
+                  <div key={course.id} className="flex items-center gap-4">
+                    <img
+                      src={course.image}
+                      alt={course.title}
+                      className="h-12 w-12 rounded-xl object-cover"
+                    />
+                    <div className="flex-1 space-y-1.5">
+                      <div className="flex justify-between text-sm">
+                        <span className="font-medium line-clamp-1">{course.title}</span>
+                        <span className="text-muted-foreground shrink-0 ml-2">{coursePercentage}%</span>
+                      </div>
+                      <Progress value={coursePercentage} className="h-1.5" />
+                    </div>
                   </div>
-                  <Progress value={course.progress} className="h-1.5" />
-                </div>
-              </div>
-            ))}
+                )
+              })
+            )}
           </CardContent>
         </Card>
 
         <Card>
           <CardHeader>
-            <CardTitle className="text-base">Achievements</CardTitle>
+            <CardTitle className="text-base">Achievements (sample)</CardTitle>
           </CardHeader>
           <CardContent className="space-y-3">
             {achievements.map((achievement, i) => (
