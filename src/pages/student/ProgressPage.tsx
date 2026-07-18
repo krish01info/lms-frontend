@@ -7,13 +7,8 @@ import { StatCard } from '@/components/common/StatCard'
 import { EmptyState } from '@/components/common/EmptyState'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Progress } from '@/components/ui/progress'
-import { weeklyProgressData, attendanceBySubject } from '@/constants/mockData'
+import { weeklyProgressData } from '@/constants/mockData'
 import api from '@/services/api'
-
-const attendanceChart = attendanceBySubject.map((s) => ({
-  name: s.subject,
-  value: s.percentage,
-}))
 
 // NOTE: no backend endpoint for learning goals yet — stays mock until built
 const learningGoals = [
@@ -32,6 +27,15 @@ export function ProgressPage() {
     },
   })
 
+  // Reused from AttendancePage/ProfilePage — same query cache
+  const { data: attendanceData, isLoading: isAttendanceLoading } = useQuery({
+    queryKey: ['attendance-my'],
+    queryFn: async () => {
+      const res = await api.get('/attendance/my')
+      return res.data.data
+    },
+  })
+
   const courses = courseProgress || []
   const avgProgress = courses.length
     ? Math.round(courses.reduce((acc: number, c: any) => acc + c.percentage, 0) / courses.length)
@@ -41,6 +45,12 @@ export function ProgressPage() {
   const courseProgressChart = courses.map((c: any) => ({
     name: c.courseTitle.split(' ').slice(0, 2).join(' '),
     value: c.percentage,
+  }))
+
+  const attendanceSummary = attendanceData?.summary || []
+  const attendanceChart = attendanceSummary.map((s: any) => ({
+    name: s.courseTitle,
+    value: s.percentage,
   }))
 
   return (
@@ -111,7 +121,22 @@ export function ProgressPage() {
         </Card>
 
         <div className="space-y-6">
-          <ChartCard title="Attendance Overview (mock)" data={attendanceChart} type="pie" dataKey="value" xKey="name" height={240} />
+          {isAttendanceLoading ? (
+            <div className="h-60 rounded-xl bg-muted animate-pulse" />
+          ) : attendanceChart.length === 0 ? (
+            <Card>
+              <CardHeader>
+                <CardTitle className="text-base">Attendance Overview</CardTitle>
+              </CardHeader>
+              <CardContent>
+                <p className="text-sm text-muted-foreground py-6 text-center">
+                  No attendance data yet.
+                </p>
+              </CardContent>
+            </Card>
+          ) : (
+            <ChartCard title="Attendance Overview" data={attendanceChart} type="pie" dataKey="value" xKey="name" height={240} />
+          )}
 
           <Card>
             <CardHeader>
