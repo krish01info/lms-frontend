@@ -15,7 +15,7 @@ import { useNavigate, useParams } from 'react-router-dom'
 import api from '@/services/api'
 
 import axios from 'axios'
-import { Upload, Video, ImagePlus, FileText, X, CheckCircle2, Mail, Calendar, BookOpen, Users, Play, Briefcase, Plus, Trash2, Edit3, ArrowLeft, Eye, Layers } from 'lucide-react'
+import { Upload, Video, ImagePlus, FileText, X, CheckCircle2, Mail, Calendar, BookOpen, Users, Play, Briefcase, Plus, Trash2, Edit3, ArrowLeft, Eye } from 'lucide-react'
 import { Textarea } from '@/components/ui/textarea'
 
 const schema = z.object({
