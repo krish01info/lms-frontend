@@ -71,9 +71,19 @@ export function StudentDashboard() {
     },
   })
 
+  // Live attendance — shares cache with AttendancePage/ProfilePage/ProgressPage
+  const { data: attendanceData, isLoading: isAttendanceLoading } = useQuery({
+    queryKey: ['attendance-my'],
+    queryFn: async () => {
+      const res = await api.get('/attendance/my')
+      return res.data.data
+    },
+  })
+
   const courses = courseData || []
   const progress = progressData || []
-  const isLoading = isCoursesLoading || isProgressLoading
+  const isLoading = isCoursesLoading || isProgressLoading || isAttendanceLoading
+  const attendancePercentage = attendanceData?.overallPercentage ?? 0
 
   // NOTE: assignments blocked — teammate's /assignments endpoint returns 404, still mock for now
   const todayClasses = mockCalendarEvents.filter((e) => e.type === 'class').slice(0, 3)
@@ -111,7 +121,7 @@ export function StudentDashboard() {
       </motion.div>
 
       <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
-        <StatCard label="Attendance" value="92%" change="Sample data" trend="up" icon={Users} />
+        <StatCard label="Attendance" value={`${attendancePercentage}%`} icon={Users} />
         <StatCard label="Current GPA" value="3.85" change="Sample data" trend="up" icon={Award} iconClassName="bg-emerald-500/10" />
         <StatCard
           label="Courses Active"

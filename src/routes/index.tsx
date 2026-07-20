@@ -57,6 +57,14 @@ import {
   TeacherAttendancePage,
   GradebookPage,
   AnnouncementsPage,
+
+  PerformancePage,
+  TeacherMessagesPage,
+  TeacherAnalyticsPage,
+  TeacherResourcesPage,
+  TeacherProfilePage,
+  TeacherManageLessonsPage,
+
 } from '@/pages/teacher/Pages'
 
 // Parent
@@ -153,8 +161,12 @@ export const router = createBrowserRouter([
       { path: '/teacher', element: withSuspense(<TeacherDashboard />) },
       { path: '/teacher/create-course', element: withSuspense(<CreateCoursePage />) },
       { path: '/teacher/courses', element: withSuspense(<TeacherCoursesPage />) },
+
       { path: '/teacher/courses/:courseId/edit', element: withSuspense(<CourseEditPage />) },
       { path: '/teacher/courses/:courseId/lessons', element: withSuspense(<LessonManagerPage />) },
+
+      { path: '/teacher/courses/:courseId/lessons', element: withSuspense(<TeacherManageLessonsPage />) },
+
       { path: '/teacher/assignments', element: withSuspense(<TeacherAssignmentsPage />) },
       { path: '/teacher/assignments/:assignmentId/submissions', element: withSuspense(<AssignmentSubmissionsPage />) },
       { path: '/teacher/quiz-builder', element: withSuspense(<QuizBuilderPage />) },
