@@ -57,14 +57,6 @@ import {
   TeacherAttendancePage,
   GradebookPage,
   AnnouncementsPage,
-
-  PerformancePage,
-  TeacherMessagesPage,
-  TeacherAnalyticsPage,
-  TeacherResourcesPage,
-  TeacherProfilePage,
-  TeacherManageLessonsPage,
-
 } from '@/pages/teacher/Pages'
 
 // Parent
@@ -164,8 +156,6 @@ export const router = createBrowserRouter([
 
       { path: '/teacher/courses/:courseId/edit', element: withSuspense(<CourseEditPage />) },
       { path: '/teacher/courses/:courseId/lessons', element: withSuspense(<LessonManagerPage />) },
-
-      { path: '/teacher/courses/:courseId/lessons', element: withSuspense(<TeacherManageLessonsPage />) },
 
       { path: '/teacher/assignments', element: withSuspense(<TeacherAssignmentsPage />) },
       { path: '/teacher/assignments/:assignmentId/submissions', element: withSuspense(<AssignmentSubmissionsPage />) },
