@@ -7,14 +7,15 @@ import { Card, CardContent } from '@/components/ui/card'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
+import { Switch } from '@/components/ui/switch'
 import { toast } from 'sonner'
 
 import { useState, useEffect } from 'react'
-import { useNavigate } from 'react-router-dom'
+import { useNavigate, useParams } from 'react-router-dom'
 import api from '@/services/api'
 
 import axios from 'axios'
-import { Upload, Video, ImagePlus, FileText, X, CheckCircle2 } from 'lucide-react'
+import { Upload, Video, ImagePlus, FileText, X, CheckCircle2, Mail, Calendar, BookOpen, Users, Play, Briefcase, Plus, Trash2, Edit3, ArrowLeft, Eye, Layers } from 'lucide-react'
 import { Textarea } from '@/components/ui/textarea'
 
 const schema = z.object({
@@ -486,6 +487,15 @@ export function TeacherCoursesPage() {
                           </SelectContent>
                         </Select>
 
+                        {/* Lessons button */}
+                        <Button
+                          variant="secondary"
+                          size="sm"
+                          onClick={() => navigate(`/teacher/courses/${course.id}/lessons`)}
+                        >
+                          <Play className="h-3.5 w-3.5 mr-1 text-primary" /> Lessons
+                        </Button>
+
                         {/* Edit button */}
                         <Button
                           variant="outline"
@@ -745,4 +755,663 @@ export function TeacherResourcesPage() {
   )
 }
 
-export { ProfilePage as TeacherProfilePage } from '@/pages/student/ProfilePage'
+
+export function TeacherProfilePage() {
+  const [user, setUser] = useState<any>(null)
+  const [myCourses, setMyCourses] = useState<any[]>([])
+  const [isLoading, setIsLoading] = useState(true)
+
+  useEffect(() => {
+    const fetchAll = async () => {
+      try {
+        const [userRes, coursesRes] = await Promise.all([
+          api.get('/users/me'),
+          api.get('/courses/my'),
+        ])
+        setUser(userRes.data.data.user)
+        setMyCourses(coursesRes.data.data.courses || [])
+      } catch {
+        toast.error('Failed to load profile.')
+      } finally {
+        setIsLoading(false)
+      }
+    }
+    fetchAll()
+  }, [])
+
+  const totalStudents = myCourses.reduce((sum: number, c: any) => sum + (c.enrollmentCount || 0), 0)
+  const totalLessons  = myCourses.reduce((sum: number, c: any) => sum + (c.lessonCount  || 0), 0)
+  const publishedCount = myCourses.filter((c: any) => c.status === 'PUBLISHED').length
+  const draftCount     = myCourses.filter((c: any) => c.status === 'DRAFT').length
+
+  if (isLoading) {
+    return (
+      <PageShell title="My Profile" description="Your instructor profile">
+        <div className="space-y-4">
+          <div className="h-48 rounded-2xl bg-muted animate-pulse" />
+          <div className="grid grid-cols-4 gap-4">
+            {[1,2,3,4].map(i => <div key={i} className="h-24 rounded-xl bg-muted animate-pulse" />)}
+          </div>
+        </div>
+      </PageShell>
+    )
+  }
+
+  return (
+    <PageShell title="My Profile" description="Your instructor profile and teaching overview">
+
+      {/* ── Profile Banner ── */}
+      <Card className="overflow-hidden">
+        <CardContent className="p-0">
+          {/* Banner gradient */}
+          <div className="h-36 bg-gradient-to-r from-primary/80 via-primary to-violet-600 relative">
+            <div className="absolute inset-0 opacity-20"
+              style={{ backgroundImage: 'radial-gradient(circle at 20% 50%, white 1px, transparent 1px)', backgroundSize: '30px 30px' }}
+            />
+          </div>
+
+          <div className="relative px-6 pb-6">
+            <div className="flex flex-col sm:flex-row sm:items-end sm:justify-between gap-4">
+              <div className="flex items-end gap-4 -mt-14">
+                {/* Avatar */}
+                <div className="relative">
+                  <div className="h-24 w-24 rounded-2xl border-4 border-card shadow-xl overflow-hidden bg-primary/10 flex items-center justify-center">
+                    {user?.avatar ? (
+                      <img src={user.avatar} alt={user.name} className="h-full w-full object-cover" />
+                    ) : (
+                      <span className="text-3xl font-bold text-primary">{user?.name?.[0] || 'T'}</span>
+                    )}
+                  </div>
+                  <span className="absolute -bottom-1 -right-1 bg-emerald-500 rounded-full w-5 h-5 border-2 border-card" title="Active" />
+                </div>
+                <div className="pb-1">
+                  <h2 className="text-2xl font-bold">{user?.name}</h2>
+                  <div className="flex items-center gap-2 mt-1">
+                    <span className="text-xs bg-primary/10 text-primary font-semibold px-2.5 py-0.5 rounded-full border border-primary/20">
+                      INSTRUCTOR
+                    </span>
+                    <span className="text-sm text-muted-foreground">LearnFlow Academy</span>
+                  </div>
+                </div>
+              </div>
+              <Button variant="outline" className="shrink-0">Edit Profile</Button>
+            </div>
+
+            {/* Info row */}
+            <div className="mt-5 grid gap-3 sm:grid-cols-3">
+              <div className="flex items-center gap-3 rounded-2xl bg-muted/50 p-4">
+                <Mail className="h-5 w-5 text-muted-foreground shrink-0" />
+                <div className="min-w-0">
+                  <p className="text-xs text-muted-foreground">Email</p>
+                  <p className="text-sm font-medium truncate">{user?.email}</p>
+                </div>
+              </div>
+              <div className="flex items-center gap-3 rounded-2xl bg-muted/50 p-4">
+                <Briefcase className="h-5 w-5 text-muted-foreground shrink-0" />
+                <div>
+                  <p className="text-xs text-muted-foreground">Role</p>
+                  <p className="text-sm font-medium">Instructor</p>
+                </div>
+              </div>
+              <div className="flex items-center gap-3 rounded-2xl bg-muted/50 p-4">
+                <Calendar className="h-5 w-5 text-muted-foreground shrink-0" />
+                <div>
+                  <p className="text-xs text-muted-foreground">Member Since</p>
+                  <p className="text-sm font-medium">
+                    {user?.createdAt ? new Date(user.createdAt).toLocaleDateString('en-IN', { month: 'short', year: 'numeric' }) : '—'}
+                  </p>
+                </div>
+              </div>
+            </div>
+          </div>
+        </CardContent>
+      </Card>
+
+      {/* ── Stats ── */}
+      <div className="grid gap-4 sm:grid-cols-4">
+        <Card>
+          <CardContent className="p-5 flex items-center gap-4">
+            <div className="h-12 w-12 rounded-2xl bg-primary/10 flex items-center justify-center shrink-0">
+              <BookOpen className="h-6 w-6 text-primary" />
+            </div>
+            <div>
+              <p className="text-2xl font-bold">{myCourses.length}</p>
+              <p className="text-xs text-muted-foreground">Total Courses</p>
+            </div>
+          </CardContent>
+        </Card>
+        <Card>
+          <CardContent className="p-5 flex items-center gap-4">
+            <div className="h-12 w-12 rounded-2xl bg-emerald-500/10 flex items-center justify-center shrink-0">
+              <Users className="h-6 w-6 text-emerald-600" />
+            </div>
+            <div>
+              <p className="text-2xl font-bold">{totalStudents}</p>
+              <p className="text-xs text-muted-foreground">Total Students</p>
+            </div>
+          </CardContent>
+        </Card>
+        <Card>
+          <CardContent className="p-5 flex items-center gap-4">
+            <div className="h-12 w-12 rounded-2xl bg-amber-500/10 flex items-center justify-center shrink-0">
+              <Play className="h-6 w-6 text-amber-600" />
+            </div>
+            <div>
+              <p className="text-2xl font-bold">{totalLessons}</p>
+              <p className="text-xs text-muted-foreground">Total Lessons</p>
+            </div>
+          </CardContent>
+        </Card>
+        <Card>
+          <CardContent className="p-5 flex items-center gap-4">
+            <div className="h-12 w-12 rounded-2xl bg-violet-500/10 flex items-center justify-center shrink-0">
+              <CheckCircle2 className="h-6 w-6 text-violet-600" />
+            </div>
+            <div>
+              <p className="text-2xl font-bold">{publishedCount}</p>
+              <p className="text-xs text-muted-foreground">Published · {draftCount} Draft</p>
+            </div>
+          </CardContent>
+        </Card>
+      </div>
+
+      {/* ── My Courses ── */}
+      <Card>
+        <CardContent className="p-6">
+          <h3 className="text-base font-semibold mb-4 flex items-center gap-2">
+            <BookOpen className="h-5 w-5 text-primary" /> My Courses
+          </h3>
+          {myCourses.length === 0 ? (
+            <p className="text-sm text-muted-foreground text-center py-6">
+              You haven't created any courses yet.
+            </p>
+          ) : (
+            <div className="space-y-3">
+              {myCourses.map((course: any) => (
+                <div key={course.id} className="flex items-center gap-4 rounded-2xl border p-4 hover:bg-muted/30 transition-colors">
+                  {course.thumbnail ? (
+                    <img src={course.thumbnail} alt={course.title} className="h-12 w-16 rounded-xl object-cover shrink-0" />
+                  ) : (
+                    <div className="h-12 w-16 rounded-xl bg-muted flex items-center justify-center shrink-0 text-xs text-muted-foreground">No img</div>
+                  )}
+                  <div className="flex-1 min-w-0">
+                    <p className="font-medium text-sm truncate">{course.title}</p>
+                    <p className="text-xs text-muted-foreground mt-0.5">
+                      {course.enrollmentCount || 0} students · {course.lessonCount || 0} lessons
+                    </p>
+                  </div>
+                  <span className={`text-xs px-2.5 py-1 rounded-full font-medium border shrink-0 ${
+                    course.status === 'PUBLISHED' ? 'bg-emerald-500/10 text-emerald-600 border-emerald-500/20' :
+                    course.status === 'DRAFT'     ? 'bg-amber-500/10 text-amber-600 border-amber-500/20' :
+                    'bg-muted text-muted-foreground border-border'
+                  }`}>
+                    {course.status}
+                  </span>
+                </div>
+              ))}
+            </div>
+          )}
+        </CardContent>
+      </Card>
+
+      {/* ── Teaching Highlights ── */}
+      <Card>
+        <CardContent className="p-6">
+          <h3 className="text-base font-semibold mb-4">Teaching Highlights</h3>
+          <div className="grid gap-3 sm:grid-cols-3">
+            {[
+              { label: 'Course Completion Rate', value: '78%', color: 'text-primary' },
+              { label: 'Avg. Student Rating',    value: '4.8 ★', color: 'text-amber-500' },
+              { label: 'Avg. Assignment Score',  value: '84%',   color: 'text-emerald-600' },
+            ].map((item) => (
+              <div key={item.label} className="rounded-2xl bg-muted/50 p-5 text-center">
+                <p className={`text-3xl font-bold ${item.color}`}>{item.value}</p>
+                <p className="text-xs text-muted-foreground mt-1">{item.label}</p>
+              </div>
+            ))}
+          </div>
+        </CardContent>
+      </Card>
+
+    </PageShell>
+  )
+}
+
+export function TeacherManageLessonsPage() {
+  const { courseId } = useParams<{ courseId: string }>()
+  const navigate = useNavigate()
+
+  const [course, setCourse] = useState<any>(null)
+  const [lessons, setLessons] = useState<any[]>([])
+  const [isLoading, setIsLoading] = useState(true)
+
+  // Add / Edit Modal state
+  const [isModalOpen, setIsModalOpen] = useState(false)
+  const [editingLesson, setEditingLesson] = useState<any | null>(null)
+  const [form, setForm] = useState({
+    title: '',
+    description: '',
+    type: 'VIDEO',
+    videoUrl: '',
+    content: '',
+    order: 1,
+    isPreview: false,
+  })
+  const [videoFile, setVideoFile] = useState<File | null>(null)
+  const [isUploading, setIsUploading] = useState(false)
+  const [uploadProgress, setUploadProgress] = useState<number | null>(null)
+  const [isSaving, setIsSaving] = useState(false)
+
+  // Delete Modal state
+  const [deletingLessonId, setDeletingLessonId] = useState<string | null>(null)
+  const [isDeleting, setIsDeleting] = useState(false)
+
+  const fetchData = async () => {
+    if (!courseId) return
+    setIsLoading(true)
+    try {
+      const [courseRes, lessonsRes] = await Promise.all([
+        api.get(`/courses/${courseId}`),
+        api.get(`/courses/${courseId}/lessons`),
+      ])
+      setCourse(courseRes.data.data.course)
+      setLessons(lessonsRes.data.data.lessons || [])
+    } catch (err: any) {
+      toast.error(err.response?.data?.message || 'Failed to load lessons.')
+    } finally {
+      setIsLoading(false)
+    }
+  }
+
+  useEffect(() => {
+    fetchData()
+  }, [courseId])
+
+  const openAddModal = () => {
+    setEditingLesson(null)
+    setForm({
+      title: '',
+      description: '',
+      type: 'VIDEO',
+      videoUrl: '',
+      content: '',
+      order: lessons.length + 1,
+      isPreview: false,
+    })
+    setVideoFile(null)
+    setUploadProgress(null)
+    setIsModalOpen(true)
+  }
+
+  const openEditModal = (lesson: any) => {
+    setEditingLesson(lesson)
+    setForm({
+      title: lesson.title || '',
+      description: lesson.description || '',
+      type: lesson.type || 'VIDEO',
+      videoUrl: lesson.videoUrl || '',
+      content: lesson.content || '',
+      order: lesson.order || 1,
+      isPreview: !!lesson.isPreview,
+    })
+    setVideoFile(null)
+    setUploadProgress(null)
+    setIsModalOpen(true)
+  }
+
+  const uploadToCloudinary = async (file: File, type: 'video' | 'image' | 'raw') => {
+    const { data: signRes } = await api.get(`/uploads/sign-cloudinary?type=${type}`)
+    const { signature, timestamp, folder } = signRes.data
+
+    const cloudName = signRes.data.cloudName || import.meta.env.VITE_CLOUDINARY_CLOUD_NAME
+    const apiKey    = signRes.data.apiKey    || import.meta.env.VITE_CLOUDINARY_API_KEY
+
+    if (!cloudName || !apiKey) {
+      throw new Error('Cloudinary is not configured.')
+    }
+
+    const formData = new FormData()
+    formData.append('file', file)
+    formData.append('api_key', apiKey)
+    formData.append('timestamp', timestamp.toString())
+    formData.append('signature', signature)
+    formData.append('folder', folder)
+
+    const uploadUrl = `https://api.cloudinary.com/v1_1/${cloudName}/${type}/upload`
+    const { data: uploadRes } = await axios.post(uploadUrl, formData, {
+      headers: { 'Content-Type': 'multipart/form-data' },
+      onUploadProgress: (progressEvent) => {
+        if (progressEvent.total) {
+          const percent = Math.round((progressEvent.loaded * 100) / progressEvent.total)
+          setUploadProgress(percent)
+        }
+      }
+    })
+    return uploadRes.secure_url
+  }
+
+  const handleSave = async (e: React.FormEvent) => {
+    e.preventDefault()
+    if (!form.title.trim()) {
+      toast.error('Lesson title is required.')
+      return
+    }
+
+    setIsSaving(true)
+    let finalVideoUrl = form.videoUrl
+
+    try {
+      if (form.type === 'VIDEO' && videoFile) {
+        setIsUploading(true)
+        finalVideoUrl = await uploadToCloudinary(videoFile, 'video')
+        setIsUploading(false)
+      }
+
+      const payload = {
+        title: form.title,
+        description: form.description,
+        type: form.type,
+        videoUrl: finalVideoUrl,
+        content: form.content,
+        order: Number(form.order) || 1,
+        isPreview: form.isPreview,
+      }
+
+      if (editingLesson) {
+        const { data } = await api.patch(`/courses/${courseId}/lessons/${editingLesson.id}`, payload)
+        setLessons(prev => prev.map(l => l.id === editingLesson.id ? data.data.lesson : l))
+        toast.success('Lesson updated successfully!')
+      } else {
+        const { data } = await api.post(`/courses/${courseId}/lessons`, payload)
+        setLessons(prev => [...prev, data.data.lesson])
+        toast.success('Lesson created successfully!')
+      }
+      setIsModalOpen(false)
+    } catch (err: any) {
+      toast.error(err.response?.data?.message || err.message || 'Failed to save lesson.')
+    } finally {
+      setIsSaving(false)
+      setIsUploading(false)
+    }
+  }
+
+  const handleDelete = async () => {
+    if (!deletingLessonId || !courseId) return
+    setIsDeleting(true)
+    try {
+      await api.delete(`/courses/${courseId}/lessons/${deletingLessonId}`)
+      setLessons(prev => prev.filter(l => l.id !== deletingLessonId))
+      toast.success('Lesson deleted.')
+      setDeletingLessonId(null)
+    } catch (err: any) {
+      toast.error(err.response?.data?.message || 'Failed to delete lesson.')
+    } finally {
+      setIsDeleting(false)
+    }
+  }
+
+  if (isLoading) {
+    return (
+      <PageShell title="Manage Lessons" description="Loading course content...">
+        <div className="text-center py-12 text-muted-foreground">Loading lessons...</div>
+      </PageShell>
+    )
+  }
+
+  return (
+    <PageShell
+      title={course ? `Manage Lessons: ${course.title}` : 'Manage Lessons'}
+      description="Create, reorder, or update lessons for this course"
+      actions={
+        <div className="flex gap-2">
+          <Button variant="outline" onClick={() => navigate('/teacher/courses')}>
+            <ArrowLeft className="h-4 w-4 mr-1.5" /> Back to Courses
+          </Button>
+          <Button onClick={openAddModal}>
+            <Plus className="h-4 w-4 mr-1.5" /> Add Lesson
+          </Button>
+        </div>
+      }
+    >
+      <div className="space-y-4">
+        {lessons.length === 0 ? (
+          <Card className="text-center py-16 border-dashed">
+            <CardContent className="space-y-3">
+              <div className="h-12 w-12 rounded-2xl bg-primary/10 text-primary flex items-center justify-center mx-auto">
+                <Play className="h-6 w-6" />
+              </div>
+              <p className="text-lg font-semibold">No lessons added yet</p>
+              <p className="text-sm text-muted-foreground max-w-sm mx-auto">
+                Add video or text lessons to build out your course curriculum for students.
+              </p>
+              <Button onClick={openAddModal} className="mt-2">
+                <Plus className="h-4 w-4 mr-1.5" /> Add First Lesson
+              </Button>
+            </CardContent>
+          </Card>
+        ) : (
+          lessons
+            .sort((a, b) => (a.order || 0) - (b.order || 0))
+            .map((lesson, index) => (
+              <Card key={lesson.id} className="overflow-hidden hover:border-primary/50 transition-colors">
+                <CardContent className="p-4 flex items-center gap-4">
+                  {/* Order badge */}
+                  <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-primary/10 text-primary font-bold text-sm">
+                    #{lesson.order || index + 1}
+                  </div>
+
+                  {/* Info */}
+                  <div className="flex-1 min-w-0 space-y-1">
+                    <div className="flex items-center gap-2 flex-wrap">
+                      <span className="font-semibold text-base">{lesson.title}</span>
+                      <span className="text-xs px-2 py-0.5 rounded-md font-medium border bg-muted flex items-center gap-1">
+                        {lesson.type === 'VIDEO' ? <Video className="h-3 w-3 text-blue-500" /> : <FileText className="h-3 w-3 text-amber-500" />}
+                        {lesson.type}
+                      </span>
+                      {lesson.isPreview && (
+                        <span className="text-xs px-2 py-0.5 rounded-md font-medium bg-emerald-500/10 text-emerald-600 border border-emerald-500/20 flex items-center gap-1">
+                          <Eye className="h-3 w-3" /> Free Preview
+                        </span>
+                      )}
+                    </div>
+
+                    {lesson.description && (
+                      <p className="text-sm text-muted-foreground line-clamp-1">{lesson.description}</p>
+                    )}
+
+                    {lesson.videoUrl && (
+                      <p className="text-xs text-blue-600 dark:text-blue-400 font-mono truncate max-w-md">
+                        🎥 {lesson.videoUrl}
+                      </p>
+                    )}
+                  </div>
+
+                  {/* Actions */}
+                  <div className="flex items-center gap-2 shrink-0">
+                    <Button variant="outline" size="sm" onClick={() => openEditModal(lesson)}>
+                      <Edit3 className="h-3.5 w-3.5 mr-1" /> Edit
+                    </Button>
+                    <Button variant="destructive" size="sm" onClick={() => setDeletingLessonId(lesson.id)}>
+                      <Trash2 className="h-3.5 w-3.5 mr-1" /> Delete
+                    </Button>
+                  </div>
+                </CardContent>
+              </Card>
+            ))
+        )}
+      </div>
+
+      {/* ── Add / Edit Lesson Modal ── */}
+      {isModalOpen && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm p-4 overflow-y-auto">
+          <div className="bg-background rounded-2xl shadow-2xl w-full max-w-lg p-6 space-y-5 my-8">
+            <div className="flex items-center justify-between">
+              <h3 className="text-lg font-bold">
+                {editingLesson ? 'Edit Lesson' : 'Add New Lesson'}
+              </h3>
+              <button onClick={() => setIsModalOpen(false)} className="text-muted-foreground hover:text-foreground">
+                <X className="h-5 w-5" />
+              </button>
+            </div>
+
+            <form onSubmit={handleSave} className="space-y-4">
+              {/* Title */}
+              <div className="space-y-1.5">
+                <Label>Lesson Title *</Label>
+                <Input
+                  required
+                  placeholder="e.g. Introduction to Derivatives"
+                  value={form.title}
+                  onChange={e => setForm({ ...form, title: e.target.value })}
+                />
+              </div>
+
+              {/* Description */}
+              <div className="space-y-1.5">
+                <Label>Description</Label>
+                <Textarea
+                  placeholder="Brief overview of what students will learn in this lesson..."
+                  rows={3}
+                  value={form.description}
+                  onChange={e => setForm({ ...form, description: e.target.value })}
+                />
+              </div>
+
+              {/* Type & Order */}
+              <div className="grid grid-cols-2 gap-4">
+                <div className="space-y-1.5">
+                  <Label>Lesson Type</Label>
+                  <Select value={form.type} onValueChange={val => setForm({ ...form, type: val })}>
+                    <SelectTrigger><SelectValue /></SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="VIDEO">Video Lesson</SelectItem>
+                      <SelectItem value="TEXT">Text / Article Lesson</SelectItem>
+                    </SelectContent>
+                  </Select>
+                </div>
+
+                <div className="space-y-1.5">
+                  <Label>Lesson Order (#)</Label>
+                  <Input
+                    type="number"
+                    min={1}
+                    value={form.order}
+                    onChange={e => setForm({ ...form, order: parseInt(e.target.value) || 1 })}
+                  />
+                </div>
+              </div>
+
+              {/* Video upload / URL if type === VIDEO */}
+              {form.type === 'VIDEO' && (
+                <div className="space-y-3 border rounded-xl p-4 bg-muted/30">
+                  <Label className="text-sm font-semibold flex items-center gap-1.5">
+                    <Video className="h-4 w-4 text-primary" /> Video File or URL
+                  </Label>
+
+                  {/* File upload option */}
+                  <div className="space-y-1.5">
+                    <span className="text-xs text-muted-foreground">Option 1: Upload Video File</span>
+                    <input
+                      type="file"
+                      accept="video/*"
+                      className="block w-full text-xs text-muted-foreground file:mr-3 file:py-2 file:px-4 file:rounded-xl file:border-0 file:text-xs file:font-semibold file:bg-primary/10 file:text-primary hover:file:bg-primary/20"
+                      onChange={e => setVideoFile(e.target.files?.[0] || null)}
+                    />
+                    {videoFile && (
+                      <p className="text-xs text-emerald-600 font-medium">Selected: {videoFile.name} ({(videoFile.size / (1024 * 1024)).toFixed(2)} MB)</p>
+                    )}
+                  </div>
+
+                  <div className="relative flex items-center justify-center my-2">
+                    <span className="bg-background px-2 text-[10px] text-muted-foreground uppercase">or</span>
+                    <div className="absolute inset-0 border-t border-border -z-10" />
+                  </div>
+
+                  {/* Video URL option */}
+                  <div className="space-y-1.5">
+                    <span className="text-xs text-muted-foreground">Option 2: Direct Video URL</span>
+                    <Input
+                      placeholder="https://res.cloudinary.com/... or https://..."
+                      value={form.videoUrl}
+                      onChange={e => setForm({ ...form, videoUrl: e.target.value })}
+                    />
+                  </div>
+                </div>
+              )}
+
+              {/* Text content if type === TEXT */}
+              {form.type === 'TEXT' && (
+                <div className="space-y-1.5">
+                  <Label>Lesson Text Content</Label>
+                  <Textarea
+                    placeholder="Enter full lesson notes or instructions..."
+                    rows={6}
+                    value={form.content}
+                    onChange={e => setForm({ ...form, content: e.target.value })}
+                  />
+                </div>
+              )}
+
+              {/* Is Preview Switch */}
+              <div className="flex items-center justify-between rounded-xl border p-3 bg-muted/20">
+                <div className="space-y-0.5">
+                  <Label className="text-sm font-medium">Allow Free Preview</Label>
+                  <p className="text-xs text-muted-foreground">Non-enrolled students can preview this lesson for free</p>
+                </div>
+                <Switch
+                  checked={form.isPreview}
+                  onCheckedChange={checked => setForm({ ...form, isPreview: checked })}
+                />
+              </div>
+
+              {/* Upload Progress */}
+              {uploadProgress !== null && (
+                <div className="space-y-1.5">
+                  <div className="flex justify-between text-xs font-medium">
+                    <span>Uploading video to Cloudinary...</span>
+                    <span>{uploadProgress}%</span>
+                  </div>
+                  <div className="h-1.5 w-full bg-secondary rounded-full overflow-hidden">
+                    <div className="h-full bg-primary transition-all duration-300" style={{ width: `${uploadProgress}%` }} />
+                  </div>
+                </div>
+              )}
+
+              {/* Modal buttons */}
+              <div className="flex justify-end gap-2 pt-2">
+                <Button type="button" variant="outline" onClick={() => setIsModalOpen(false)}>
+                  Cancel
+                </Button>
+                <Button type="submit" disabled={isSaving || isUploading}>
+                  {isSaving ? (isUploading ? 'Uploading Video...' : 'Saving...') : (editingLesson ? 'Update Lesson' : 'Create Lesson')}
+                </Button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
+
+      {/* ── Delete Confirmation Modal ── */}
+      {deletingLessonId && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm p-4">
+          <div className="bg-background rounded-2xl shadow-2xl w-full max-w-md p-6 space-y-4">
+            <h3 className="text-lg font-bold text-destructive">Delete Lesson?</h3>
+            <p className="text-sm text-muted-foreground">
+              Are you sure you want to delete this lesson? This action cannot be undone.
+            </p>
+            <div className="flex justify-end gap-2 pt-2">
+              <Button variant="outline" onClick={() => setDeletingLessonId(null)}>
+                Cancel
+              </Button>
+              <Button variant="destructive" disabled={isDeleting} onClick={handleDelete}>
+                {isDeleting ? 'Deleting...' : 'Yes, Delete'}
+              </Button>
+            </div>
+          </div>
+        </div>
+      )}
+    </PageShell>
+  )
+}
+
+
