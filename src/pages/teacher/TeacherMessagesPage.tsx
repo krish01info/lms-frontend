@@ -1,6 +1,5 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { motion } from 'framer-motion'
-import { useQuery } from '@tanstack/react-query'
 import {
   ArrowLeft,
   MessageSquare,
@@ -44,7 +43,8 @@ import {
   useCreateConversation,
 } from '@/hooks/useMessageData'
 import { useMessageSocket } from '@/hooks/useMessageSocket'
-import api from '@/services/api'
+import { useMyCourses } from '@/hooks/useCourseData'
+import { useGradebook } from '@/hooks/useGradebookData'
 
 // ─── Helpers ───────────────────────────────────────────────────────────────
 
@@ -65,24 +65,9 @@ function formatMessageTime(ts: string): string {
   return date.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
 }
 
-/** Fetch enrolled courses — each contains instructor info we need for the compose dialog. */
-function useEnrolledCourses() {
-  return useQuery({
-    queryKey: ['enrolled-courses'],
-    queryFn: async () => {
-      const res = await api.get('/courses/enrolled')
-      return res.data.data.courses as Array<{
-        id: string
-        title: string
-        instructor: { id: string; name: string; avatar: string | null }
-      }>
-    },
-  })
-}
-
 // ─── Page ─────────────────────────────────────────────────────────────────
 
-export function MessagesPage() {
+export function TeacherMessagesPage() {
   const { user } = useAuth()
   const currentUserId = user?.id ?? ''
 
@@ -92,7 +77,7 @@ export function MessagesPage() {
   const [mobileView, setMobileView] = useState<'list' | 'chat'>('list')
   const [composeOpen, setComposeOpen] = useState(false)
   const [composeCourseId, setComposeCourseId] = useState('')
-  const [composeInstructorId, setComposeInstructorId] = useState('')
+  const [composeStudentId, setComposeStudentId] = useState('')
   const messagesEndRef = useRef<HTMLDivElement>(null)
 
   // ─── API hooks ─────────────────────────────────────────────────────────
@@ -108,17 +93,14 @@ export function MessagesPage() {
   const markReadMutation = useMarkConversationRead(activeConvId ?? '')
   const createConvMutation = useCreateConversation()
 
-  // Fetch enrolled courses (for the compose dialog — pick an instructor to message)
-  const enrolledQuery = useEnrolledCourses()
-  const enrolledCourses = enrolledQuery.data ?? []
-
-  // When a course is selected, extract the unique instructor
-  const instructors = useMemo(() => {
-    if (!composeCourseId) return []
-    const course = enrolledCourses.find((c) => c.id === composeCourseId)
-    if (!course?.instructor) return []
-    return [{ id: course.instructor.id, name: course.instructor.name, avatar: course.instructor.avatar }]
-  }, [composeCourseId, enrolledCourses])
+  // Fetch courses + enrolled students for the compose dialog
+  const coursesQuery = useMyCourses()
+  const courses = coursesQuery.data ?? []
+  const gradebookQuery = useGradebook(composeCourseId || undefined)
+  const availableStudents = useMemo(() => {
+    if (!gradebookQuery.data) return []
+    return gradebookQuery.data.rows.map((r) => ({ id: r.userId, name: r.name }))
+  }, [gradebookQuery.data])
 
   const activeConv = conversations.find((c) => c.id === activeConvId) ?? null
 
@@ -176,16 +158,16 @@ export function MessagesPage() {
   // ─── Compose: start a new conversation ────────────────────────────────
   const openCompose = () => {
     setComposeCourseId('')
-    setComposeInstructorId('')
+    setComposeStudentId('')
     setComposeOpen(true)
   }
 
   const handleStartConversation = () => {
-    if (!composeInstructorId) {
-      toast.error('Select an instructor first.')
+    if (!composeStudentId) {
+      toast.error('Select a student first.')
       return
     }
-    createConvMutation.mutate(composeInstructorId, {
+    createConvMutation.mutate(composeStudentId, {
       onSuccess: (conv) => {
         toast.success('Conversation started!')
         setComposeOpen(false)
@@ -261,7 +243,7 @@ export function MessagesPage() {
                 <MessageSquare className="h-8 w-8 text-muted-foreground/50" />
                 <div>
                   <p className="text-sm font-medium text-muted-foreground">Could not load conversations</p>
-                  <p className="mt-1 text-xs text-muted-foreground/60">Please try again later.</p>
+                  <p className="mt-1 text-xs text-muted-foreground/60">The messages table may need a database migration.</p>
                 </div>
                 <div className="flex gap-2">
                   <Button variant="outline" size="sm" onClick={() => conversationsQuery.refetch()}>Retry</Button>
@@ -273,7 +255,7 @@ export function MessagesPage() {
                 <MessageSquare className="h-8 w-8 text-muted-foreground/50" />
                 <div>
                   <p className="text-sm font-medium text-muted-foreground">No conversations yet</p>
-                  <p className="mt-1 text-xs text-muted-foreground/60">Start a conversation with one of your instructors.</p>
+                  <p className="mt-1 text-xs text-muted-foreground/60">Start a new conversation with a student.</p>
                 </div>
                 <Button variant="default" size="sm" onClick={openCompose}>New Message</Button>
               </div>
@@ -283,6 +265,7 @@ export function MessagesPage() {
                 <p className="text-sm text-muted-foreground">
                   {search ? 'No conversations match your search.' : 'No conversations yet.'}
                 </p>
+                {search && <p className="mt-1 text-xs text-muted-foreground/60">Try a different search term</p>}
               </div>
             ) : (
               <div className="py-1">
@@ -345,21 +328,23 @@ export function MessagesPage() {
                 </Avatar>
                 <div>
                   <p className="text-sm font-medium">{activeConv.participant.name}</p>
-                  <p className="text-xs text-muted-foreground">Instructor</p>
+                  <p className="text-xs text-muted-foreground">Online</p>
                 </div>
               </div>
-              <DropdownMenu>
-                <DropdownMenuTrigger asChild>
-                  <Button variant="ghost" size="icon">
-                    <MoreHorizontal className="h-4 w-4" />
-                  </Button>
-                </DropdownMenuTrigger>
-                <DropdownMenuContent align="end">
-                  <DropdownMenuItem>View profile</DropdownMenuItem>
-                  <DropdownMenuSeparator />
-                  <DropdownMenuItem className="text-destructive">Block user</DropdownMenuItem>
-                </DropdownMenuContent>
-              </DropdownMenu>
+              <div className="flex items-center gap-1">
+                <DropdownMenu>
+                  <DropdownMenuTrigger asChild>
+                    <Button variant="ghost" size="icon">
+                      <MoreHorizontal className="h-4 w-4" />
+                    </Button>
+                  </DropdownMenuTrigger>
+                  <DropdownMenuContent align="end">
+                    <DropdownMenuItem>View profile</DropdownMenuItem>
+                    <DropdownMenuSeparator />
+                    <DropdownMenuItem className="text-destructive">Block user</DropdownMenuItem>
+                  </DropdownMenuContent>
+                </DropdownMenu>
+              </div>
             </div>
 
             {/* Messages */}
@@ -466,7 +451,7 @@ export function MessagesPage() {
               <h3 className="text-lg font-semibold">Your Messages</h3>
               <p className="mt-1 max-w-sm text-sm text-muted-foreground">
                 {hasNoConversations
-                  ? 'No conversations yet. Click "New Message" above to message an instructor.'
+                  ? 'No conversations yet. Click "New Message" above to start one.'
                   : 'Select a conversation or start a new one.'}
               </p>
               {hasNoConversations && (
@@ -485,68 +470,54 @@ export function MessagesPage() {
         <DialogContent>
           <DialogHeader>
             <DialogTitle>New Message</DialogTitle>
-            <DialogDescription>Pick a course to message your instructor.</DialogDescription>
+            <DialogDescription>Choose a course, then pick a student to message.</DialogDescription>
           </DialogHeader>
 
           <div className="space-y-4 pt-2">
             <div className="space-y-2">
               <Label>Course</Label>
-              <Select
-                value={composeCourseId}
-                onValueChange={(v) => { setComposeCourseId(v); setComposeInstructorId('') }}
-                disabled={enrolledCourses.length === 0}
-              >
-                <SelectTrigger>
-                  <SelectValue placeholder={enrolledQuery.isLoading ? 'Loading courses...' : 'Select a course'} />
-                </SelectTrigger>
+              <Select value={composeCourseId} onValueChange={(v) => { setComposeCourseId(v); setComposeStudentId('') }}>
+                <SelectTrigger><SelectValue placeholder="Select a course" /></SelectTrigger>
                 <SelectContent>
-                  {enrolledCourses.map((c) => (
+                  {courses.map((c) => (
                     <SelectItem key={c.id} value={c.id}>{c.title}</SelectItem>
                   ))}
                 </SelectContent>
               </Select>
-              {!enrolledQuery.isLoading && enrolledCourses.length === 0 && (
-                <p className="text-xs text-muted-foreground">You are not enrolled in any courses.</p>
-              )}
             </div>
 
-            {composeCourseId && instructors.length > 0 && (
+            {composeCourseId && (
               <div className="space-y-2">
-                <Label>Instructor</Label>
-                <div className="space-y-1">
-                  {instructors.map((inst) => (
-                    <button
-                      key={inst.id}
-                      type="button"
-                      onClick={() => setComposeInstructorId(inst.id)}
-                      className={cn(
-                        'flex w-full items-center gap-3 rounded-xl px-3 py-2.5 text-left text-sm transition-colors hover:bg-muted',
-                        composeInstructorId === inst.id && 'bg-primary/10 ring-1 ring-primary/30',
-                      )}
-                    >
-                      <Avatar className="h-8 w-8">
-                        <AvatarImage src={inst.avatar ?? undefined} />
-                        <AvatarFallback className="text-xs">{inst.name[0]}</AvatarFallback>
-                      </Avatar>
-                      <div>
-                        <p className="font-medium">{inst.name}</p>
-                        <p className="text-xs text-muted-foreground">Course Instructor</p>
-                      </div>
-                    </button>
-                  ))}
-                </div>
+                <Label>Student</Label>
+                <ScrollArea className="max-h-48">
+                  <div className="space-y-1">
+                    {availableStudents.length === 0 && (
+                      <p className="py-4 text-center text-sm text-muted-foreground">No students enrolled in this course.</p>
+                    )}
+                    {availableStudents.map((s) => (
+                      <button
+                        key={s.id}
+                        type="button"
+                        onClick={() => setComposeStudentId(s.id)}
+                        className={cn(
+                          'flex w-full items-center gap-3 rounded-xl px-3 py-2 text-left text-sm transition-colors hover:bg-muted',
+                          composeStudentId === s.id && 'bg-primary/10 ring-1 ring-primary/30',
+                        )}
+                      >
+                        <Avatar className="h-7 w-7">
+                          <AvatarFallback className="text-[10px]">{s.name[0]}</AvatarFallback>
+                        </Avatar>
+                        <span className="font-medium">{s.name}</span>
+                      </button>
+                    ))}
+                  </div>
+                </ScrollArea>
               </div>
-            )}
-
-            {composeCourseId && instructors.length === 0 && !enrolledQuery.isLoading && (
-              <p className="py-2 text-center text-sm text-muted-foreground">
-                No instructor assigned to this course.
-              </p>
             )}
 
             <div className="flex justify-end gap-2 pt-2">
               <Button variant="outline" onClick={() => setComposeOpen(false)}>Cancel</Button>
-              <Button onClick={handleStartConversation} disabled={!composeInstructorId || createConvMutation.isPending}>
+              <Button onClick={handleStartConversation} disabled={!composeStudentId || createConvMutation.isPending}>
                 {createConvMutation.isPending ? 'Creating...' : 'Start Conversation'}
               </Button>
             </div>

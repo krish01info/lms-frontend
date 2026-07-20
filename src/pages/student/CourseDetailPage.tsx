@@ -1,7 +1,7 @@
-import { useParams } from 'react-router-dom'
+import { useParams, Link } from 'react-router-dom'
 import { motion } from 'framer-motion'
 import { useQuery } from '@tanstack/react-query'
-import { BookOpen, Download, FileText, MessageSquare, Play, Star, Users } from 'lucide-react'
+import { BookOpen, Clock, Download, FileText, HelpCircle, MessageSquare, PenTool, Play, Star, Trophy, Users } from 'lucide-react'
 import { Breadcrumbs } from '@/components/common/Breadcrumbs'
 import { EmptyState } from '@/components/common/EmptyState'
 import { Badge } from '@/components/ui/badge'
@@ -10,6 +10,9 @@ import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Progress } from '@/components/ui/progress'
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
 import { mockAssignments } from '@/constants/mockData'
+import { useQuizList } from '@/hooks/useQuizData'
+import { useMyAttempt } from '@/hooks/useQuizData'
+import type { ApiQuiz } from '@/types'
 import api from '@/services/api'
 import { transformCourse, transformLesson } from '@/utils/transformers'
 
@@ -85,6 +88,7 @@ export function CourseDetailPage() {
               <TabsTrigger value="modules">Lessons</TabsTrigger>
               <TabsTrigger value="resources">Resources</TabsTrigger>
               <TabsTrigger value="assignments">Assignments</TabsTrigger>
+              <TabsTrigger value="quizzes">Quizzes</TabsTrigger>
               <TabsTrigger value="discussion">Discussion</TabsTrigger>
             </TabsList>
 
@@ -153,6 +157,10 @@ export function CourseDetailPage() {
               ))}
             </TabsContent>
 
+            <TabsContent value="quizzes" className="space-y-3">
+              <CourseQuizzesTab courseId={id!} />
+            </TabsContent>
+
             <TabsContent value="discussion" className="space-y-3">
               {['Question about integration by parts', 'Help with problem 15', 'Study group for midterm'].map((topic) => (
                 <Card key={topic} className="cursor-pointer hover:shadow-md transition-shadow">
@@ -196,5 +204,97 @@ export function CourseDetailPage() {
         </div>
       </div>
     </div>
+  )
+}
+
+function CourseQuizzesTab({ courseId }: { courseId: string }) {
+  const { data, isLoading } = useQuizList(courseId)
+  const quizzes = data?.quizzes ?? []
+
+  if (isLoading) {
+    return (
+      <div className="space-y-3">
+        {[1, 2].map((i) => (
+          <div key={i} className="h-24 rounded-xl bg-muted animate-pulse" />
+        ))}
+      </div>
+    )
+  }
+
+  if (!quizzes.length) {
+    return (
+      <EmptyState
+        icon={PenTool}
+        title="No quizzes yet"
+        description="This course doesn't have any active quizzes yet."
+      />
+    )
+  }
+
+  return (
+    <div className="grid gap-3 sm:grid-cols-2">
+      {quizzes.map((quiz, i) => (
+        <CourseQuizCard key={quiz.id} quiz={quiz} index={i} />
+      ))}
+    </div>
+  )
+}
+
+function CourseQuizCard({ quiz, index }: { quiz: ApiQuiz; index: number }) {
+  const { data: attempt } = useMyAttempt(quiz.id)
+  const isCompleted = !!attempt
+
+  return (
+    <motion.div
+      initial={{ opacity: 0, y: 20 }}
+      animate={{ opacity: 1, y: 0 }}
+      transition={{ delay: index * 0.05 }}
+    >
+      <Card className="h-full hover:shadow-md transition-shadow">
+        <CardContent className="p-4">
+          <div className="flex items-start justify-between gap-3">
+            <div className="flex items-center gap-3">
+              <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-primary/10">
+                {isCompleted ? (
+                  <Trophy className="h-5 w-5 text-emerald-600" />
+                ) : (
+                  <PenTool className="h-5 w-5 text-primary" />
+                )}
+              </div>
+              <div>
+                <p className="font-medium text-sm">{quiz.title}</p>
+                <div className="flex items-center gap-2 mt-0.5 text-xs text-muted-foreground">
+                  <span className="flex items-center gap-1">
+                    <HelpCircle className="h-3 w-3" />
+                    {quiz.questionCount} Qs
+                  </span>
+                  {quiz.timeLimit && (
+                    <span className="flex items-center gap-1">
+                      <Clock className="h-3 w-3" />
+                      {quiz.timeLimit}min
+                    </span>
+                  )}
+                </div>
+              </div>
+            </div>
+            <Badge variant={isCompleted ? 'secondary' : 'default'}>
+              {isCompleted ? 'Done' : 'Open'}
+            </Badge>
+          </div>
+
+          <div className="mt-4">
+            {isCompleted ? (
+              <Button variant="outline" size="sm" className="w-full" asChild>
+                <Link to={`/student/quizzes/${quiz.id}/results`}>View Results</Link>
+              </Button>
+            ) : (
+              <Button size="sm" className="w-full" asChild>
+                <Link to={`/student/quizzes/take/${quiz.id}`}>Start Quiz</Link>
+              </Button>
+            )}
+          </div>
+        </CardContent>
+      </Card>
+    </motion.div>
   )
 }

@@ -1,748 +1,603 @@
+import { useState } from 'react'
 import { useForm } from 'react-hook-form'
 import { zodResolver } from '@hookform/resolvers/zod'
 import { z } from 'zod'
+import { useNavigate, Link } from 'react-router-dom'
+import { BookOpen, FileText, Users, GraduationCap, Megaphone, Pencil } from 'lucide-react'
 import { PageShell } from '@/components/common/PageShell'
+import { PageSkeleton } from '@/components/common/Skeleton'
+import { ErrorState } from '@/components/common/ErrorState'
+import { EmptyState } from '@/components/common/EmptyState'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent } from '@/components/ui/card'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
+import { Switch } from '@/components/ui/switch'
 import { toast } from 'sonner'
-
-import { useState, useEffect } from 'react'
-import { useNavigate } from 'react-router-dom'
-import api from '@/services/api'
-
-import axios from 'axios'
-import { Upload, Video, ImagePlus, FileText, X, CheckCircle2 } from 'lucide-react'
-import { Textarea } from '@/components/ui/textarea'
+import {
+  Dialog,
+  DialogContent,
+  DialogHeader,
+  DialogTitle,
+  DialogDescription,
+} from '@/components/ui/dialog'
+import { useCreateCourse, useMyCourses } from '@/hooks/useCourseData'
+import { useAssignmentList, useCreateAssignment } from '@/hooks/useAssignmentData'
+import { useRoster, useMarkAttendance } from '@/hooks/useAttendanceData'
+import { useGradebook } from '@/hooks/useGradebookData'
+import { useAnnouncementList, useCreateAnnouncement } from '@/hooks/useAnnouncementData'
+import type { ApiAssignment, ApiAnnouncement } from '@/types'
 
 const schema = z.object({
-  title: z.string().min(3, 'Title must be at least 3 characters'),
-  description: z.string().min(10, 'Description must be at least 10 characters'),
-  category: z.string().min(1, 'Please select a category'),
-  duration: z.string().optional(),
-  price: z.string().optional(),
+  title: z.string().trim().min(3, 'Title must be at least 3 characters'),
+  description: z.string().trim().min(10, 'Description must be at least 10 characters'),
+  category: z.string().min(1, 'Select a category'),
+  price: z.string().optional(), // empty = free (0)
 })
-
-const categories = [
-  'Mathematics', 'Science', 'Technology', 'Computer Science',
-  'Data Science', 'Web Development', 'Mobile Development', 'AI & Machine Learning',
-  'Business', 'Marketing', 'Design', 'Photography',
-  'Music', 'Language', 'Health & Fitness', 'Personal Development',
-  'Engineering', 'Finance', 'Law', 'Other',
-]
+type CreateCourseValues = z.infer<typeof schema>
 
 export function CreateCoursePage() {
-  const { register, handleSubmit, setValue, formState: { errors } } = useForm({ resolver: zodResolver(schema) })
   const navigate = useNavigate()
-  const [isSubmitting, setIsSubmitting] = useState(false)
-  const [videoFile, setVideoFile] = useState<File | null>(null)
-  const [thumbnailFile, setThumbnailFile] = useState<File | null>(null)
-  const [thumbnailPreview, setThumbnailPreview] = useState<string | null>(null)
-  const [resourceFiles, setResourceFiles] = useState<File[]>([])
-  const [uploadProgress, setUploadProgress] = useState<number | null>(null)
-  const [uploadStage, setUploadStage] = useState('')
+  const { register, handleSubmit, setValue, formState: { errors } } = useForm<CreateCourseValues>({ resolver: zodResolver(schema) })
+  const createCourse = useCreateCourse()
 
-  const handleVideoChange = (e: React.ChangeEvent<HTMLInputElement>) => {
-    if (e.target.files?.[0]) setVideoFile(e.target.files[0])
-  }
-
-  const handleThumbnailChange = (e: React.ChangeEvent<HTMLInputElement>) => {
-    if (e.target.files?.[0]) {
-      setThumbnailFile(e.target.files[0])
-      setThumbnailPreview(URL.createObjectURL(e.target.files[0]))
-    }
-  }
-
-  const handleResourceChange = (e: React.ChangeEvent<HTMLInputElement>) => {
-    if (e.target.files) {
-      setResourceFiles(prev => [...prev, ...Array.from(e.target.files!)])
-    }
-  }
-
-  const removeResource = (index: number) => {
-    setResourceFiles(prev => prev.filter((_, i) => i !== index))
-  }
-
-  const uploadToCloudinary = async (file: File, type: 'video' | 'image' | 'raw') => {
-    const { data: signRes } = await api.get(`/uploads/sign-cloudinary?type=${type}`)
-    const { signature, timestamp, folder } = signRes.data
-
-    // Use backend response first, fallback to frontend env vars
-    const cloudName = signRes.data.cloudName || import.meta.env.VITE_CLOUDINARY_CLOUD_NAME
-    const apiKey    = signRes.data.apiKey    || import.meta.env.VITE_CLOUDINARY_API_KEY
-
-    if (!cloudName || !apiKey) {
-      throw new Error('Cloudinary is not configured. Please set CLOUDINARY_CLOUD_NAME and CLOUDINARY_API_KEY.')
-    }
-
-    const formData = new FormData()
-    formData.append('file', file)
-    formData.append('api_key', apiKey)
-    formData.append('timestamp', timestamp.toString())
-    formData.append('signature', signature)
-    formData.append('folder', folder)
-
-    const uploadUrl = `https://api.cloudinary.com/v1_1/${cloudName}/${type}/upload`
-    const { data: uploadRes } = await axios.post(uploadUrl, formData, {
-      headers: { 'Content-Type': 'multipart/form-data' },
-      onUploadProgress: (progressEvent) => {
-        if (progressEvent.total) {
-          const percent = Math.round((progressEvent.loaded * 100) / progressEvent.total)
-          setUploadProgress(percent)
-        }
-      }
-    })
-    return uploadRes.secure_url
-  }
-
-  const onSubmit = async (values: any) => {
-    setIsSubmitting(true)
-    let videoUrl = null
-    let thumbnailUrl = null
-
-    try {
-      // Upload thumbnail if selected (non-blocking — course still creates if this fails)
-      if (thumbnailFile) {
-        try {
-          setUploadStage('Uploading thumbnail...')
-          setUploadProgress(0)
-          thumbnailUrl = await uploadToCloudinary(thumbnailFile, 'image')
-        } catch (uploadErr: any) {
-          console.error('Thumbnail upload failed:', uploadErr?.response?.data || uploadErr.message)
-          toast.warning('Thumbnail upload failed — course will be created without it.')
-        }
-      }
-
-      // Upload video if selected (non-blocking — course still creates if this fails)
-      if (videoFile) {
-        try {
-          setUploadStage('Uploading intro video...')
-          setUploadProgress(0)
-          videoUrl = await uploadToCloudinary(videoFile, 'video')
-        } catch (uploadErr: any) {
-          console.error('Video upload failed:', uploadErr?.response?.data || uploadErr.message)
-          toast.warning('Video upload failed — course will be created without it.')
-        }
-      }
-
-      // Save course in database
-      setUploadStage('Creating course...')
-      setUploadProgress(null)
-
-      await api.post('/courses', {
+  const onSubmit = (values: CreateCourseValues) => {
+    createCourse.mutate(
+      {
         title: values.title,
         description: values.description,
         category: values.category,
-        price: values.price ? parseFloat(values.price) : 0,
+        price: values.price ? Number(values.price) : 0,
         status: 'PUBLISHED',
-        videoUrl,
-        thumbnail: thumbnailUrl,
-      })
-
-      toast.success('Course created successfully!')
-      navigate('/teacher/courses')
-    } catch (err: any) {
-      console.error('Create course error:', err?.response?.data || err.message)
-      toast.error(err.response?.data?.message || err.message || 'Failed to create course.')
-    } finally {
-      setIsSubmitting(false)
-      setUploadProgress(null)
-      setUploadStage('')
-    }
-
+      },
+      {
+        onSuccess: () => {
+          toast.success('Course created!')
+          navigate('/teacher/courses')
+        },
+        onError: () => {
+          toast.error('Could not create the course. Please check the details and try again.')
+        },
+      }
+    )
   }
 
   return (
-    <PageShell title="Create Course" description="Design and publish a new course for your students">
-      <form onSubmit={handleSubmit(onSubmit)} className="space-y-6">
-
-        {/* ── Section 1: Basic Info ── */}
-        <Card>
-          <CardContent className="p-6">
-            <h3 className="text-lg font-semibold mb-4 flex items-center gap-2">
-              <FileText className="h-5 w-5 text-primary" /> Course Details
-            </h3>
-            <div className="space-y-4">
-              <div className="space-y-2">
-                <Label htmlFor="title">Course Title *</Label>
-                <Input id="title" placeholder="e.g. Introduction to Machine Learning" {...register('title')} className="text-base" />
-                {errors.title && <p className="text-xs text-destructive">{errors.title.message as string}</p>}
+    <PageShell title="Create Course" description="Set up a new course for your students">
+      <Card>
+        <CardContent className="p-6 space-y-5">
+          <form onSubmit={handleSubmit(onSubmit)} className="space-y-5">
+            <div className="space-y-2"><Label>Course Title</Label><Input placeholder="Introduction to Data Science" {...register('title')} />{errors.title && <p className="text-xs text-destructive">{errors.title.message}</p>}</div>
+            <div className="space-y-2"><Label>Description</Label><Input placeholder="Course description..." {...register('description')} />{errors.description && <p className="text-xs text-destructive">{errors.description.message}</p>}</div>
+            <div className="grid gap-4 sm:grid-cols-2">
+              <div className="space-y-2"><Label>Category</Label>
+                <Select onValueChange={(v) => setValue('category', v, { shouldValidate: true })}><SelectTrigger><SelectValue placeholder="Select" /></SelectTrigger>
+                  <SelectContent><SelectItem value="Mathematics">Mathematics</SelectItem><SelectItem value="Science">Science</SelectItem><SelectItem value="Technology">Technology</SelectItem></SelectContent>
+                </Select>
+                {errors.category && <p className="text-xs text-destructive">{errors.category.message}</p>}
               </div>
-              <div className="space-y-2">
-                <Label htmlFor="description">Description *</Label>
-                <Textarea id="description" rows={4} placeholder="Describe what students will learn, prerequisites, and course outline..." {...register('description')} />
-                {errors.description && <p className="text-xs text-destructive">{errors.description.message as string}</p>}
-              </div>
-              <div className="grid gap-4 sm:grid-cols-3">
-                <div className="space-y-2">
-                  <Label>Category *</Label>
-                  <Select onValueChange={(v) => setValue('category', v)}>
-                    <SelectTrigger><SelectValue placeholder="Select a category" /></SelectTrigger>
-                    <SelectContent>
-                      {categories.map((cat) => (
-                        <SelectItem key={cat} value={cat.toLowerCase().replace(/ & /g, '-').replace(/ /g, '-')}>{cat}</SelectItem>
-                      ))}
-                    </SelectContent>
-                  </Select>
-                  {errors.category && <p className="text-xs text-destructive">{errors.category.message as string}</p>}
-                </div>
-                <div className="space-y-2">
-                  <Label htmlFor="duration">Duration</Label>
-                  <Input id="duration" placeholder="e.g. 12 weeks" {...register('duration')} />
-                </div>
-                <div className="space-y-2">
-                  <Label htmlFor="price">Price (₹)</Label>
-                  <Input id="price" type="number" placeholder="0 for free" {...register('price')} />
-                </div>
-              </div>
+              <div className="space-y-2"><Label>Price ($, optional)</Label><Input type="number" min="0" step="0.01" placeholder="0" {...register('price')} /></div>
             </div>
-          </CardContent>
-        </Card>
-
-        {/* ── Section 2: Media Uploads ── */}
-        <Card>
-          <CardContent className="p-6">
-            <h3 className="text-lg font-semibold mb-4 flex items-center gap-2">
-              <Upload className="h-5 w-5 text-primary" /> Media & Resources
-            </h3>
-            <div className="grid gap-6 md:grid-cols-2">
-              {/* Thumbnail Upload */}
-              <div className="space-y-2">
-                <Label>Course Thumbnail</Label>
-                <label
-                  htmlFor="thumbnailUpload"
-                  className="flex flex-col items-center justify-center gap-2 rounded-2xl border-2 border-dashed border-muted-foreground/25 bg-muted/30 p-6 cursor-pointer hover:border-primary/50 hover:bg-primary/5 transition-all duration-200"
-                >
-                  {thumbnailPreview ? (
-                    <img src={thumbnailPreview} alt="Preview" className="h-28 w-full rounded-xl object-cover" />
-                  ) : (
-                    <>
-                      <ImagePlus className="h-10 w-10 text-muted-foreground/50" />
-                      <span className="text-sm text-muted-foreground">Click to upload cover image</span>
-                      <span className="text-xs text-muted-foreground/60">JPG, PNG, WEBP — max 5 MB</span>
-                    </>
-                  )}
-                  <input id="thumbnailUpload" type="file" accept="image/*" className="hidden" onChange={handleThumbnailChange} />
-                </label>
-              </div>
-
-              {/* Video Upload */}
-              <div className="space-y-2">
-                <Label>Intro Video</Label>
-                <label
-                  htmlFor="videoUpload"
-                  className="flex flex-col items-center justify-center gap-2 rounded-2xl border-2 border-dashed border-muted-foreground/25 bg-muted/30 p-6 cursor-pointer hover:border-primary/50 hover:bg-primary/5 transition-all duration-200"
-                >
-                  {videoFile ? (
-                    <div className="text-center">
-                      <CheckCircle2 className="h-10 w-10 text-emerald-500 mx-auto mb-1" />
-                      <span className="text-sm font-medium">{videoFile.name}</span>
-                      <span className="block text-xs text-muted-foreground">{(videoFile.size / (1024 * 1024)).toFixed(2)} MB</span>
-                    </div>
-                  ) : (
-                    <>
-                      <Video className="h-10 w-10 text-muted-foreground/50" />
-                      <span className="text-sm text-muted-foreground">Click to upload intro video</span>
-                      <span className="text-xs text-muted-foreground/60">MP4, MOV, MKV, WEBM — max 100 MB</span>
-                    </>
-                  )}
-                  <input id="videoUpload" type="file" accept="video/*" className="hidden" onChange={handleVideoChange} />
-                </label>
-              </div>
-            </div>
-
-            {/* Resource Uploads */}
-            <div className="mt-6 space-y-2">
-              <Label>Course Resources (PDFs, Documents, Images)</Label>
-              <label
-                htmlFor="resourceUpload"
-                className="flex items-center justify-center gap-2 rounded-2xl border-2 border-dashed border-muted-foreground/25 bg-muted/30 p-4 cursor-pointer hover:border-primary/50 hover:bg-primary/5 transition-all duration-200"
-              >
-                <Upload className="h-5 w-5 text-muted-foreground/50" />
-                <span className="text-sm text-muted-foreground">Click to attach resource files</span>
-                <input id="resourceUpload" type="file" accept=".pdf,.doc,.docx,.ppt,.pptx,.xls,.xlsx,.zip,.png,.jpg,.jpeg" multiple className="hidden" onChange={handleResourceChange} />
-              </label>
-              {resourceFiles.length > 0 && (
-                <div className="space-y-2 mt-2">
-                  {resourceFiles.map((file, i) => (
-                    <div key={i} className="flex items-center justify-between rounded-xl bg-muted/50 px-4 py-2">
-                      <span className="text-sm truncate">{file.name} ({(file.size / (1024 * 1024)).toFixed(2)} MB)</span>
-                      <button type="button" onClick={() => removeResource(i)} className="text-muted-foreground hover:text-destructive transition-colors">
-                        <X className="h-4 w-4" />
-                      </button>
-                    </div>
-                  ))}
-                </div>
-              )}
-            </div>
-          </CardContent>
-        </Card>
-
-        {/* ── Upload Progress ── */}
-        {uploadProgress !== null && (
-          <Card>
-            <CardContent className="p-4">
-              <div className="space-y-2">
-                <div className="flex justify-between text-sm font-medium">
-                  <span>{uploadStage}</span>
-                  <span>{uploadProgress}%</span>
-                </div>
-                <div className="h-2 w-full bg-secondary rounded-full overflow-hidden">
-                  <div className="h-full bg-primary transition-all duration-300 rounded-full" style={{ width: `${uploadProgress}%` }} />
-                </div>
-              </div>
-            </CardContent>
-          </Card>
-        )}
-
-        {/* ── Submit ── */}
-        <div className="flex gap-3">
-          <Button type="submit" size="lg" disabled={isSubmitting} className="min-w-[180px]">
-            {isSubmitting ? uploadStage || 'Creating...' : '🚀 Publish Course'}
-          </Button>
-          <Button type="button" variant="outline" size="lg" onClick={() => navigate('/teacher/courses')}>
-            Cancel
-          </Button>
-        </div>
-      </form>
+            <Button type="submit" disabled={createCourse.isPending}>
+              {createCourse.isPending ? 'Creating…' : 'Create Course'}
+            </Button>
+          </form>
+        </CardContent>
+      </Card>
     </PageShell>
   )
 }
 
 export function TeacherCoursesPage() {
-  const [courses, setCourses] = useState<any[]>([])
-  const [isLoading, setIsLoading] = useState(true)
-  const navigate = useNavigate()
+  const coursesQuery = useMyCourses()
+  const courses = coursesQuery.data ?? []
 
-  // Edit dialog state
-  const [editCourse, setEditCourse] = useState<any | null>(null)
-  const [editForm, setEditForm] = useState({ title: '', description: '', price: '', status: '' })
-  const [isEditing, setIsEditing] = useState(false)
-
-  // Delete dialog state
-  const [deleteCourseId, setDeleteCourseId] = useState<string | null>(null)
-  const [isDeleting, setIsDeleting] = useState(false)
-
-  // Status toggle loading
-  const [statusLoading, setStatusLoading] = useState<string | null>(null)
-
-  const fetchCourses = async () => {
-    try {
-      const { data } = await api.get('/courses/my')
-      setCourses(data.data.courses || [])
-    } catch {
-      toast.error('Failed to load courses.')
-    } finally {
-      setIsLoading(false)
-    }
-  }
-
-  useEffect(() => { fetchCourses() }, [])
-
-  // ── Open edit dialog pre-filled ──────────────────────────────────────────────
-  const openEdit = (course: any) => {
-    setEditCourse(course)
-    setEditForm({
-      title: course.title || '',
-      description: course.description || '',
-      price: course.price?.toString() || '0',
-      status: course.status || 'DRAFT',
-    })
-  }
-
-  const handleEditSave = async () => {
-    if (!editCourse) return
-    setIsEditing(true)
-    try {
-      const { data } = await api.patch(`/courses/${editCourse.id}`, {
-        title: editForm.title,
-        description: editForm.description,
-        price: parseFloat(editForm.price) || 0,
-        status: editForm.status,
-      })
-      setCourses(prev => prev.map(c => c.id === editCourse.id ? data.data.course : c))
-      toast.success('Course updated successfully!')
-      setEditCourse(null)
-    } catch (err: any) {
-      toast.error(err.response?.data?.message || 'Failed to update course.')
-    } finally {
-      setIsEditing(false)
-    }
-  }
-
-  // ── Status toggle (quick publish/archive/draft) ───────────────────────────────
-  const handleStatusChange = async (courseId: string, newStatus: string) => {
-    setStatusLoading(courseId)
-    try {
-      const { data } = await api.patch(`/courses/${courseId}/status`, { status: newStatus })
-      setCourses(prev => prev.map(c => c.id === courseId ? { ...c, status: data.data.course.status } : c))
-      toast.success(`Course marked as ${newStatus.toLowerCase()}.`)
-    } catch (err: any) {
-      toast.error(err.response?.data?.message || 'Failed to update status.')
-    } finally {
-      setStatusLoading(null)
-    }
-  }
-
-  // ── Delete ────────────────────────────────────────────────────────────────────
-  const handleDelete = async () => {
-    if (!deleteCourseId) return
-    setIsDeleting(true)
-    try {
-      await api.delete(`/courses/${deleteCourseId}`)
-      setCourses(prev => prev.filter(c => c.id !== deleteCourseId))
-      toast.success('Course deleted.')
-      setDeleteCourseId(null)
-    } catch (err: any) {
-      toast.error(err.response?.data?.message || 'Failed to delete course.')
-    } finally {
-      setIsDeleting(false)
-    }
-  }
-
-  const statusColors: Record<string, string> = {
-    PUBLISHED: 'bg-emerald-500/10 text-emerald-600 border-emerald-500/20',
-    DRAFT: 'bg-amber-500/10 text-amber-600 border-amber-500/20',
-    ARCHIVED: 'bg-muted text-muted-foreground border-border',
-  }
-
-  if (isLoading) {
+  if (coursesQuery.isLoading) {
     return (
-      <PageShell title="Manage Courses" description="Loading courses...">
-        <div className="text-center py-8 text-muted-foreground">Loading your courses...</div>
+      <PageShell title="Manage Courses" description="View and manage your courses">
+        <PageSkeleton />
+      </PageShell>
+    )
+  }
+
+  if (coursesQuery.isError) {
+    return (
+      <PageShell title="Manage Courses" description="View and manage your courses">
+        <ErrorState message="Could not load your courses. Please try again." onRetry={() => coursesQuery.refetch()} />
       </PageShell>
     )
   }
 
   return (
-    <PageShell
-      title="Manage Courses"
-      description="View, edit, publish, or delete your courses"
-      actions={<Button onClick={() => navigate('/teacher/create-course')}>+ New Course</Button>}
-    >
-      <div className="grid gap-4">
-        {courses.length === 0 ? (
-          <div className="text-center py-16 border border-dashed rounded-2xl text-muted-foreground">
-            <p className="text-lg font-medium">No courses yet</p>
-            <p className="text-sm mt-1">Create your first course to get started.</p>
-            <Button className="mt-4" onClick={() => navigate('/teacher/create-course')}>+ Create Course</Button>
-          </div>
-        ) : (
-          courses.map((course) => (
-            <Card key={course.id} className="overflow-hidden">
-              <CardContent className="p-0">
-                <div className="flex gap-4 p-5">
-                  {/* Thumbnail */}
-                  {course.thumbnail ? (
-                    <img
-                      src={course.thumbnail}
-                      alt={course.title}
-                      className="h-20 w-32 rounded-xl object-cover flex-shrink-0"
-                    />
-                  ) : (
-                    <div className="h-20 w-32 rounded-xl bg-muted flex items-center justify-center flex-shrink-0 text-muted-foreground text-xs">
-                      No image
-                    </div>
-                  )}
-
-                  {/* Info */}
-                  <div className="flex-1 min-w-0">
-                    <div className="flex items-start justify-between gap-2 flex-wrap">
-                      <div>
-                        <p className="font-semibold text-base leading-snug">{course.title}</p>
-                        <p className="text-sm text-muted-foreground mt-0.5 line-clamp-2">
-                          {course.description || 'No description provided.'}
-                        </p>
-                        <div className="flex items-center gap-3 mt-2">
-                          <span className={`text-xs px-2.5 py-0.5 rounded-full border font-medium ${statusColors[course.status] || statusColors.DRAFT}`}>
-                            {course.status}
-                          </span>
-                          <span className="text-xs text-muted-foreground">
-                            {course.enrollmentCount || 0} students · {course.lessonCount || 0} lessons
-                          </span>
-                          {course.price > 0 && (
-                            <span className="text-xs font-semibold text-primary">₹{course.price}</span>
-                          )}
-                        </div>
-                      </div>
-
-                      {/* Actions */}
-                      <div className="flex items-center gap-2 flex-shrink-0">
-                        {/* Status quick-toggle */}
-                        <Select
-                          value={course.status}
-                          onValueChange={(val) => handleStatusChange(course.id, val)}
-                          disabled={statusLoading === course.id}
-                        >
-                          <SelectTrigger className="h-8 text-xs w-[120px]">
-                            <SelectValue />
-                          </SelectTrigger>
-                          <SelectContent>
-                            <SelectItem value="DRAFT">Draft</SelectItem>
-                            <SelectItem value="PUBLISHED">Published</SelectItem>
-                            <SelectItem value="ARCHIVED">Archived</SelectItem>
-                          </SelectContent>
-                        </Select>
-
-                        {/* Edit button */}
-                        <Button
-                          variant="outline"
-                          size="sm"
-                          onClick={() => openEdit(course)}
-                        >
-                          Edit
-                        </Button>
-
-                        {/* Delete button */}
-                        <Button
-                          variant="destructive"
-                          size="sm"
-                          onClick={() => setDeleteCourseId(course.id)}
-                        >
-                          Delete
-                        </Button>
-                      </div>
-                    </div>
-                  </div>
-                </div>
-              </CardContent>
-            </Card>
-          ))
-        )}
-      </div>
-
-      {/* ── Edit Dialog ──────────────────────────────────────────────────────── */}
-      {editCourse && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm p-4">
-          <div className="bg-background rounded-2xl shadow-2xl w-full max-w-lg p-6 space-y-5">
-            <div className="flex items-center justify-between">
-              <h2 className="text-lg font-bold">Edit Course</h2>
-              <button onClick={() => setEditCourse(null)} className="text-muted-foreground hover:text-foreground transition-colors">
-                <X className="h-5 w-5" />
-              </button>
-            </div>
-
-            <div className="space-y-4">
-              <div className="space-y-2">
-                <Label htmlFor="edit-title">Course Title</Label>
-                <Input
-                  id="edit-title"
-                  value={editForm.title}
-                  onChange={e => setEditForm(f => ({ ...f, title: e.target.value }))}
-                  placeholder="Course title"
-                />
+    <PageShell title="Manage Courses" description="View and manage your courses" searchable searchPlaceholder="Search courses...">
+      {courses.length === 0 ? (
+        <EmptyState
+          icon={BookOpen}
+          title="No courses yet"
+          description="Create your first course to get started."
+        />
+      ) : (
+        <div className="grid gap-4">
+          {courses.map((course) => (
+            <Card key={course.id}><CardContent className="flex items-center justify-between p-5">
+              <div>
+                <p className="font-semibold">{course.title}</p>
+                <p className="text-sm text-muted-foreground">{course.enrollmentCount ?? 0} students · {course.lessonCount ?? 0} lessons</p>
               </div>
-
-              <div className="space-y-2">
-                <Label htmlFor="edit-description">Description</Label>
-                <Textarea
-                  id="edit-description"
-                  rows={4}
-                  value={editForm.description}
-                  onChange={e => setEditForm(f => ({ ...f, description: e.target.value }))}
-                  placeholder="Course description"
-                />
-              </div>
-
-              <div className="grid grid-cols-2 gap-4">
-                <div className="space-y-2">
-                  <Label htmlFor="edit-price">Price (₹)</Label>
-                  <Input
-                    id="edit-price"
-                    type="number"
-                    value={editForm.price}
-                    onChange={e => setEditForm(f => ({ ...f, price: e.target.value }))}
-                    placeholder="0 for free"
-                  />
-                </div>
-                <div className="space-y-2">
-                  <Label>Status</Label>
-                  <Select value={editForm.status} onValueChange={val => setEditForm(f => ({ ...f, status: val }))}>
-                    <SelectTrigger><SelectValue /></SelectTrigger>
-                    <SelectContent>
-                      <SelectItem value="DRAFT">Draft</SelectItem>
-                      <SelectItem value="PUBLISHED">Published</SelectItem>
-                      <SelectItem value="ARCHIVED">Archived</SelectItem>
-                    </SelectContent>
-                  </Select>
-                </div>
-              </div>
-            </div>
-
-            <div className="flex gap-3 pt-2">
-              <Button onClick={handleEditSave} disabled={isEditing} className="flex-1">
-                {isEditing ? 'Saving...' : 'Save Changes'}
+              <Button variant="outline" size="sm" asChild>
+                <Link to={`/teacher/courses/${course.id}/edit`}>
+                  <Pencil className="mr-1.5 h-3.5 w-3.5" />
+                  Edit
+                </Link>
               </Button>
-              <Button variant="outline" onClick={() => setEditCourse(null)} className="flex-1">
-                Cancel
-              </Button>
-            </div>
-          </div>
-        </div>
-      )}
-
-      {/* ── Delete Confirm Dialog ─────────────────────────────────────────────── */}
-      {deleteCourseId && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm p-4">
-          <div className="bg-background rounded-2xl shadow-2xl w-full max-w-sm p-6 space-y-4 text-center">
-            <div className="text-4xl">⚠️</div>
-            <h2 className="text-lg font-bold">Delete Course?</h2>
-            <p className="text-sm text-muted-foreground">
-              This will permanently delete the course and all its lessons. This action cannot be undone.
-            </p>
-            <div className="flex gap-3 pt-2">
-              <Button
-                variant="destructive"
-                disabled={isDeleting}
-                onClick={handleDelete}
-                className="flex-1"
-              >
-                {isDeleting ? 'Deleting...' : 'Yes, Delete'}
-              </Button>
-              <Button
-                variant="outline"
-                onClick={() => setDeleteCourseId(null)}
-                className="flex-1"
-              >
-                Cancel
-              </Button>
-            </div>
-          </div>
+            </CardContent></Card>
+          ))}
         </div>
       )}
     </PageShell>
   )
 }
 
+const assignmentSchema = z.object({
+  title: z.string().trim().min(3, 'Title must be at least 3 characters').max(150),
+  courseId: z.string().uuid('Select a course'),
+  description: z.string().trim().max(2000).optional(),
+  dueDate: z.string().optional(), // empty = no due date
+})
+type AssignmentFormValues = z.infer<typeof assignmentSchema>
 
 export function TeacherAssignmentsPage() {
+  const [dialogOpen, setDialogOpen] = useState(false)
+  const [courseFilter, setCourseFilter] = useState<string>('all')
+
+  const coursesQuery = useMyCourses()
+  const courses = coursesQuery.data ?? []
+
+  // Global list with a client-side course filter — the backend already
+  // returns "all my assignments across my courses" when no courseId is passed.
+  const assignmentsQuery = useAssignmentList(courseFilter === 'all' ? undefined : courseFilter)
+  const assignments = assignmentsQuery.data?.assignments ?? []
+
+  const createAssignment = useCreateAssignment()
+
+  const {
+    register,
+    handleSubmit,
+    reset,
+    setValue,
+    formState: { errors },
+  } = useForm<AssignmentFormValues>({ resolver: zodResolver(assignmentSchema) })
+
+  const onSubmit = (values: AssignmentFormValues) => {
+    createAssignment.mutate(
+      {
+        title: values.title,
+        courseId: values.courseId,
+        description: values.description || undefined,
+        dueDate: values.dueDate ? new Date(values.dueDate).toISOString() : null,
+      },
+      {
+        onSuccess: () => {
+          toast.success('Assignment created!')
+          reset()
+          setDialogOpen(false)
+        },
+        onError: () => {
+          toast.error('Could not create the assignment. Please check the details and try again.')
+        },
+      }
+    )
+  }
+
+  const isLoading = coursesQuery.isLoading || assignmentsQuery.isLoading
+  const isError = coursesQuery.isError || assignmentsQuery.isError
+
   return (
-    <PageShell title="Assignments" description="Create and manage assignments" actions={<Button>Create Assignment</Button>}>
-      <div className="space-y-3">
-        {['Calculus Problem Set #6', 'Python Project Phase 2', 'Literature Review'].map((title, i) => (
-          <Card key={i}><CardContent className="flex items-center justify-between p-5">
-            <div><p className="font-medium">{title}</p><p className="text-sm text-muted-foreground">{[23, 45, 12][i]} submissions pending</p></div>
-            <Button variant="outline" size="sm">Grade</Button>
-          </CardContent></Card>
-        ))}
+    <PageShell
+      title="Assignments"
+      description="Create and manage assignments"
+      actions={<Button onClick={() => setDialogOpen(true)}>Create Assignment</Button>}
+    >
+      <div className="mb-4 max-w-xs">
+        <Select value={courseFilter} onValueChange={setCourseFilter}>
+          <SelectTrigger><SelectValue placeholder="Filter by course" /></SelectTrigger>
+          <SelectContent>
+            <SelectItem value="all">All courses</SelectItem>
+            {courses.map((course) => (
+              <SelectItem key={course.id} value={course.id}>{course.title}</SelectItem>
+            ))}
+          </SelectContent>
+        </Select>
       </div>
+
+      {isLoading ? (
+        <PageSkeleton />
+      ) : isError ? (
+        <ErrorState message="Could not load assignments. Please try again." onRetry={() => assignmentsQuery.refetch()} />
+      ) : assignments.length === 0 ? (
+        <EmptyState
+          icon={FileText}
+          title="No assignments yet"
+          description="Create your first assignment to get started."
+        />
+      ) : (
+        <div className="space-y-3">
+          {assignments.map((assignment: ApiAssignment) => (
+            <Card key={assignment.id}><CardContent className="flex items-center justify-between p-5">
+              <div>
+                <p className="font-medium">{assignment.title}</p>
+                <p className="text-sm text-muted-foreground">
+                  {assignment.course.title} · {assignment.submissionCount} submission{assignment.submissionCount === 1 ? '' : 's'}
+                  {assignment.dueDate && ` · Due ${new Date(assignment.dueDate).toLocaleDateString()}`}
+                </p>
+              </div>
+              <Link to={`/teacher/assignments/${assignment.id}/submissions`}>
+                <Button variant="outline" size="sm">Grade</Button>
+              </Link>
+            </CardContent></Card>
+          ))}
+        </div>
+      )}
+
+      <Dialog open={dialogOpen} onOpenChange={setDialogOpen}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>Create Assignment</DialogTitle>
+            <DialogDescription>Set a title, optional instructions, and an optional due date.</DialogDescription>
+          </DialogHeader>
+          <form onSubmit={handleSubmit(onSubmit)} className="space-y-4">
+            <div className="space-y-2">
+              <Label>Title</Label>
+              <Input placeholder="Problem Set #6" {...register('title')} />
+              {errors.title && <p className="text-xs text-destructive">{errors.title.message}</p>}
+            </div>
+            <div className="space-y-2">
+              <Label>Course</Label>
+              <Select onValueChange={(v) => setValue('courseId', v, { shouldValidate: true })}>
+                <SelectTrigger><SelectValue placeholder="Select a course" /></SelectTrigger>
+                <SelectContent>
+                  {courses.map((course) => (
+                    <SelectItem key={course.id} value={course.id}>{course.title}</SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+              {errors.courseId && <p className="text-xs text-destructive">{errors.courseId.message}</p>}
+            </div>
+            <div className="space-y-2">
+              <Label>Description / instructions (optional)</Label>
+              <textarea
+                className="flex min-h-24 w-full rounded-2xl border border-input bg-card px-4 py-2 text-sm placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:border-primary/50"
+                placeholder="What should students do for this assignment?"
+                {...register('description')}
+              />
+            </div>
+            <div className="space-y-2">
+              <Label>Due date (optional)</Label>
+              <Input type="date" {...register('dueDate')} />
+            </div>
+            <Button type="submit" disabled={createAssignment.isPending}>
+              {createAssignment.isPending ? 'Creating…' : 'Create Assignment'}
+            </Button>
+          </form>
+        </DialogContent>
+      </Dialog>
     </PageShell>
   )
 }
 
-export function QuizBuilderPage() {
-  return (
-    <PageShell title="Quiz Builder" description="Create interactive quizzes" actions={<Button>Create Quiz</Button>}>
-      <Card><CardContent className="p-6 space-y-4">
-        <div className="space-y-2"><Label>Quiz Title</Label><Input placeholder="Chapter 7 Quiz" /></div>
-        <div className="grid gap-4 sm:grid-cols-2">
-          <div className="space-y-2"><Label>Duration (minutes)</Label><Input type="number" defaultValue={30} /></div>
-          <div className="space-y-2"><Label>Total Questions</Label><Input type="number" defaultValue={20} /></div>
-        </div>
-        <div className="space-y-2"><Label>Question 1</Label><Input placeholder="Enter question text" /></div>
-        {['A', 'B', 'C', 'D'].map((opt) => (
-          <div key={opt} className="space-y-2"><Label>Option {opt}</Label><Input placeholder={`Option ${opt}`} /></div>
-        ))}
-        <Button>Add Question</Button>
-      </CardContent></Card>
-    </PageShell>
-  )
+function toIsoDate(d: Date) {
+  return d.toISOString().split('T')[0]
 }
 
 export function TeacherAttendancePage() {
+  const [courseId, setCourseId] = useState<string>('')
+  const [date, setDate] = useState<string>(toIsoDate(new Date()))
+  // Local optimistic edits before "Save Attendance" is pressed — keyed by userId.
+  const [pendingStatus, setPendingStatus] = useState<Record<string, 'PRESENT' | 'ABSENT'>>({})
+
+  const coursesQuery = useMyCourses()
+  const courses = coursesQuery.data ?? []
+
+  // Default to the first course once courses load, if none picked yet.
+  if (!courseId && courses.length > 0) setCourseId(courses[0].id)
+
+  const rosterQuery = useRoster(courseId || undefined, date)
+  const roster = rosterQuery.data ?? []
+  const markAttendance = useMarkAttendance(courseId, date)
+
+  const statusFor = (userId: string, defaultStatus: 'PRESENT' | 'ABSENT' | null) =>
+    pendingStatus[userId] ?? defaultStatus ?? 'PRESENT' // unmarked days default to Present — mark the exceptions
+
+  const toggle = (userId: string, current: 'PRESENT' | 'ABSENT') => {
+    setPendingStatus((prev) => ({ ...prev, [userId]: current === 'PRESENT' ? 'ABSENT' : 'PRESENT' }))
+  }
+
+  const handleSave = () => {
+    const records = roster.map((s) => ({ userId: s.userId, status: statusFor(s.userId, s.status) }))
+    markAttendance.mutate(
+      { courseId, date, records },
+      {
+        onSuccess: () => {
+          const presentCount = records.filter((r) => r.status === 'PRESENT').length
+          toast.success(`Attendance saved for ${date} — ${presentCount} present, ${records.length - presentCount} absent.`)
+          setPendingStatus({})
+        },
+        onError: () => toast.error('Could not save attendance. Please try again.'),
+      }
+    )
+  }
+
+  const isLoading = coursesQuery.isLoading || rosterQuery.isLoading
+
   return (
-    <PageShell title="Attendance" description="Mark and manage student attendance">
-      <Card><CardContent className="p-0">
-        <table className="w-full">
-          <thead><tr className="border-b"><th className="p-4 text-left text-sm font-medium">Student</th><th className="p-4 text-left text-sm font-medium">Status</th><th className="p-4 text-left text-sm font-medium">Action</th></tr></thead>
-          <tbody>
-            {['Alex Johnson', 'Emma Davis', 'James Wilson', 'Sarah Kim'].map((name) => (
-              <tr key={name} className="border-b"><td className="p-4 text-sm">{name}</td><td className="p-4"><span className="rounded-full bg-emerald-500/10 px-3 py-1 text-xs text-emerald-600">Present</span></td>
-                <td className="p-4"><Button variant="ghost" size="sm">Edit</Button></td></tr>
-            ))}
-          </tbody>
-        </table>
-      </CardContent></Card>
+    <PageShell
+      title="Attendance"
+      description="Mark and manage student attendance"
+      actions={
+        <Button onClick={handleSave} disabled={!courseId || roster.length === 0 || markAttendance.isPending}>
+          {markAttendance.isPending ? 'Saving…' : 'Save Attendance'}
+        </Button>
+      }
+    >
+      <div className="mb-4 flex flex-col gap-3 sm:flex-row sm:items-center">
+        <div className="max-w-xs flex-1">
+          <Select value={courseId} onValueChange={setCourseId}>
+            <SelectTrigger><SelectValue placeholder="Select a course" /></SelectTrigger>
+            <SelectContent>
+              {courses.map((course) => (
+                <SelectItem key={course.id} value={course.id}>{course.title}</SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
+        </div>
+        <Input
+          type="date"
+          value={date}
+          max={toIsoDate(new Date())}
+          onChange={(e) => { setDate(e.target.value); setPendingStatus({}) }}
+          className="max-w-[180px]"
+        />
+      </div>
+
+      {isLoading ? (
+        <PageSkeleton />
+      ) : rosterQuery.isError ? (
+        <ErrorState message="Could not load the roster. Please try again." onRetry={() => rosterQuery.refetch()} />
+      ) : roster.length === 0 ? (
+        <EmptyState
+          icon={Users}
+          title="No enrolled students"
+          description="This course has no active enrollments yet."
+        />
+      ) : (
+        <Card><CardContent className="p-0">
+          <table className="w-full">
+            <thead><tr className="border-b"><th className="p-4 text-left text-sm font-medium">Student</th><th className="p-4 text-left text-sm font-medium">Status</th></tr></thead>
+            <tbody>
+              {roster.map((student) => {
+                const status = statusFor(student.userId, student.status)
+                const isPresent = status === 'PRESENT'
+                return (
+                  <tr key={student.userId} className="border-b">
+                    <td className="p-4 text-sm">{student.name}</td>
+                    <td className="p-4">
+                      <div className="flex items-center gap-2">
+                        <Switch checked={isPresent} onCheckedChange={() => toggle(student.userId, status)} />
+                        <span className={isPresent ? 'text-xs text-emerald-600' : 'text-xs text-destructive'}>
+                          {isPresent ? 'Present' : 'Absent'}
+                        </span>
+                      </div>
+                    </td>
+                  </tr>
+                )
+              })}
+            </tbody>
+          </table>
+        </CardContent></Card>
+      )}
     </PageShell>
   )
 }
 
 export function GradebookPage() {
+  const [courseId, setCourseId] = useState<string>('')
+
+  const coursesQuery = useMyCourses()
+  const courses = coursesQuery.data ?? []
+  if (!courseId && courses.length > 0) setCourseId(courses[0].id)
+
+  const gradebookQuery = useGradebook(courseId || undefined)
+  const gradebook = gradebookQuery.data
+
+  const isLoading = coursesQuery.isLoading || gradebookQuery.isLoading
+
   return (
     <PageShell title="Gradebook" description="View and manage student grades">
-      <Card><CardContent className="p-0 overflow-x-auto">
-        <table className="w-full min-w-[600px]">
-          <thead><tr className="border-b bg-muted/50">
-            {['Student', 'Assignment 1', 'Assignment 2', 'Quiz 1', 'Average'].map((h) => (
-              <th key={h} className="p-4 text-left text-sm font-medium">{h}</th>
+      <div className="mb-4 max-w-xs">
+        <Select value={courseId} onValueChange={setCourseId}>
+          <SelectTrigger><SelectValue placeholder="Select a course" /></SelectTrigger>
+          <SelectContent>
+            {courses.map((course) => (
+              <SelectItem key={course.id} value={course.id}>{course.title}</SelectItem>
             ))}
-          </tr></thead>
-          <tbody>
-            {[{ name: 'Alex Johnson', grades: [92, 88, 95, 91.7] }, { name: 'Emma Davis', grades: [85, 90, 82, 85.7] }].map((s) => (
-              <tr key={s.name} className="border-b">
-                <td className="p-4 text-sm font-medium">{s.name}</td>
-                {s.grades.map((g, i) => (<td key={i} className="p-4 text-sm">{typeof g === 'number' ? (i === 3 ? <span className="font-bold text-primary">{g}%</span> : g) : g}</td>))}
-              </tr>
-            ))}
-          </tbody>
-        </table>
-      </CardContent></Card>
+          </SelectContent>
+        </Select>
+      </div>
+
+      {isLoading ? (
+        <PageSkeleton />
+      ) : gradebookQuery.isError ? (
+        <ErrorState message="Could not load the gradebook. Please try again." onRetry={() => gradebookQuery.refetch()} />
+      ) : !gradebook || gradebook.rows.length === 0 ? (
+        <EmptyState
+          icon={GraduationCap}
+          title="No grades yet"
+          description="No enrolled students or graded work found for this course yet."
+        />
+      ) : (
+        <Card><CardContent className="p-0 overflow-x-auto">
+          <table className="w-full min-w-[700px]">
+            <thead><tr className="border-b bg-muted/50">
+              <th className="p-4 text-left text-sm font-medium">Student</th>
+              {gradebook.quizzes.map((q) => (<th key={q.id} className="p-4 text-left text-sm font-medium">{q.title}</th>))}
+              {gradebook.assignments.map((a) => (<th key={a.id} className="p-4 text-left text-sm font-medium">{a.title}</th>))}
+              <th className="p-4 text-left text-sm font-medium">Overall</th>
+            </tr></thead>
+            <tbody>
+              {gradebook.rows.map((row) => (
+                <tr key={row.userId} className="border-b">
+                  <td className="p-4 text-sm font-medium">{row.name}</td>
+                  {gradebook.quizzes.map((q) => {
+                    const result = row.quizzes.find((r) => r.quizId === q.id)
+                    return <td key={q.id} className="p-4 text-sm">{result ? `${result.score}%` : '—'}</td>
+                  })}
+                  {gradebook.assignments.map((a) => {
+                    const result = row.assignments.find((r) => r.assignmentId === a.id)
+                    return (
+                      <td key={a.id} className="p-4 text-sm">
+                        {result ? (result.grade !== null ? `${result.grade}` : 'Ungraded') : '—'}
+                      </td>
+                    )
+                  })}
+                  <td className="p-4 text-sm">
+                    {row.overallGrade !== null ? (
+                      <span className="font-bold text-primary">{row.overallGrade}%</span>
+                    ) : (
+                      <span className="text-muted-foreground">No grades yet</span>
+                    )}
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </CardContent></Card>
+      )}
     </PageShell>
   )
 }
+
+const announcementSchema = z.object({
+  title: z.string().trim().min(3, 'Title must be at least 3 characters').max(150),
+  body: z.string().trim().min(1, 'Announcement body is required').max(5000),
+  courseId: z.string().optional(), // '' or 'all' = broadcast to every course
+})
+type AnnouncementFormValues = z.infer<typeof announcementSchema>
 
 export function AnnouncementsPage() {
+  const [dialogOpen, setDialogOpen] = useState(false)
+
+  // No filter dropdown needed here (unlike Assignments) — the backend already
+  // scopes the list to "my announcements across all my courses" for an
+  // instructor when no courseId is passed.
+  const announcementsQuery = useAnnouncementList()
+  const announcements = announcementsQuery.data?.announcements ?? []
+
+  const coursesQuery = useMyCourses()
+  const courses = coursesQuery.data ?? []
+
+  const createAnnouncement = useCreateAnnouncement()
+
+  const {
+    register,
+    handleSubmit,
+    reset,
+    setValue,
+    formState: { errors },
+  } = useForm<AnnouncementFormValues>({ resolver: zodResolver(announcementSchema) })
+
+  const onSubmit = (values: AnnouncementFormValues) => {
+    createAnnouncement.mutate(
+      {
+        title: values.title,
+        body: values.body,
+        courseId: !values.courseId || values.courseId === 'all' ? null : values.courseId,
+      },
+      {
+        onSuccess: () => {
+          toast.success('Announcement posted!')
+          reset()
+          setDialogOpen(false)
+        },
+        onError: () => toast.error('Could not post the announcement. Please try again.'),
+      }
+    )
+  }
+
+  const isLoading = announcementsQuery.isLoading || coursesQuery.isLoading
+
   return (
-    <PageShell title="Announcements" description="Post announcements to your classes" actions={<Button>New Announcement</Button>}>
-      <div className="space-y-3">
-        {[{ title: 'Mid-term Exam Schedule', date: 'Jun 25', course: 'All Courses' }, { title: 'Lab Session Moved', date: 'Jun 24', course: 'Physics' }].map((a) => (
-          <Card key={a.title}><CardContent className="p-5">
-            <p className="font-medium">{a.title}</p>
-            <p className="text-sm text-muted-foreground">{a.course} · {a.date}</p>
-          </CardContent></Card>
-        ))}
-      </div>
+    <PageShell
+      title="Announcements"
+      description="Post announcements to your classes"
+      actions={<Button onClick={() => setDialogOpen(true)}>New Announcement</Button>}
+    >
+      {isLoading ? (
+        <PageSkeleton />
+      ) : announcementsQuery.isError ? (
+        <ErrorState message="Could not load announcements. Please try again." onRetry={() => announcementsQuery.refetch()} />
+      ) : announcements.length === 0 ? (
+        <EmptyState
+          icon={Megaphone}
+          title="No announcements yet"
+          description="Post your first announcement to notify your students."
+        />
+      ) : (
+        <div className="space-y-3">
+          {announcements.map((a: ApiAnnouncement) => (
+            <Card key={a.id}><CardContent className="p-5">
+              <p className="font-medium">{a.title}</p>
+              <p className="mb-2 text-sm text-muted-foreground">
+                {a.course ? a.course.title : 'All Courses'} · {new Date(a.createdAt).toLocaleDateString()}
+              </p>
+              <p className="text-sm">{a.body}</p>
+            </CardContent></Card>
+          ))}
+        </div>
+      )}
+
+      <Dialog open={dialogOpen} onOpenChange={setDialogOpen}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>New Announcement</DialogTitle>
+            <DialogDescription>Post to one course, or broadcast to every course you teach.</DialogDescription>
+          </DialogHeader>
+          <form onSubmit={handleSubmit(onSubmit)} className="space-y-4">
+            <div className="space-y-2">
+              <Label>Title</Label>
+              <Input placeholder="Mid-term Exam Schedule" {...register('title')} />
+              {errors.title && <p className="text-xs text-destructive">{errors.title.message}</p>}
+            </div>
+            <div className="space-y-2">
+              <Label>Course</Label>
+              <Select defaultValue="all" onValueChange={(v) => setValue('courseId', v)}>
+                <SelectTrigger><SelectValue placeholder="All Courses" /></SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="all">All Courses</SelectItem>
+                  {courses.map((course) => (
+                    <SelectItem key={course.id} value={course.id}>{course.title}</SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
+            <div className="space-y-2">
+              <Label>Message</Label>
+              <textarea
+                className="flex min-h-24 w-full rounded-2xl border border-input bg-card px-4 py-2 text-sm placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:border-primary/50"
+                placeholder="What do your students need to know?"
+                {...register('body')}
+              />
+              {errors.body && <p className="text-xs text-destructive">{errors.body.message}</p>}
+            </div>
+            <Button type="submit" disabled={createAnnouncement.isPending}>
+              {createAnnouncement.isPending ? 'Posting…' : 'Post Announcement'}
+            </Button>
+          </form>
+        </DialogContent>
+      </Dialog>
     </PageShell>
   )
 }
 
-export function PerformancePage() {
-  return (
-    <PageShell title="Student Performance" description="Analyze student performance metrics">
-      <div className="grid gap-4 sm:grid-cols-3">
-        <Card><CardContent className="p-6 text-center"><p className="text-sm text-muted-foreground">Class Average</p><p className="text-3xl font-bold">87%</p></CardContent></Card>
-        <Card><CardContent className="p-6 text-center"><p className="text-sm text-muted-foreground">Top Performer</p><p className="text-xl font-bold">Alex Johnson</p></CardContent></Card>
-        <Card><CardContent className="p-6 text-center"><p className="text-sm text-muted-foreground">At Risk</p><p className="text-3xl font-bold text-amber-600">3</p></CardContent></Card>
-      </div>
-    </PageShell>
-  )
-}
 
-export { MessagesPage as TeacherMessagesPage } from '@/pages/student/MessagesPage'
 
-export function TeacherAnalyticsPage() {
-  return (
-    <PageShell title="Analytics" description="Detailed teaching analytics">
-      <div className="grid gap-6 lg:grid-cols-2">
-        <Card><CardContent className="p-6"><p className="text-sm text-muted-foreground mb-2">Course Completion Rate</p><p className="text-4xl font-bold text-primary">78%</p></CardContent></Card>
-        <Card><CardContent className="p-6"><p className="text-sm text-muted-foreground mb-2">Avg. Assignment Score</p><p className="text-4xl font-bold text-emerald-600">84%</p></CardContent></Card>
-      </div>
-    </PageShell>
-  )
-}
-
-export function TeacherResourcesPage() {
-  return (
-    <PageShell title="Resources" description="Manage course resources" actions={<Button>Upload Resource</Button>}>
-      <div className="grid gap-3 sm:grid-cols-2">
-        {['Lecture Slides Ch.7', 'Practice Problems', 'Video Recording'].map((r) => (
-          <Card key={r}><CardContent className="p-5 flex justify-between items-center"><span className="font-medium">{r}</span><Button variant="ghost" size="sm">Edit</Button></CardContent></Card>
-        ))}
-      </div>
-    </PageShell>
-  )
-}
-
-export { ProfilePage as TeacherProfilePage } from '@/pages/student/ProfilePage'
