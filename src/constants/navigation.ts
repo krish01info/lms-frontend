@@ -101,7 +101,6 @@ export const navigationByRole: Record<UserRole, NavConfig[]> = {
   teacher: teacherNav,
   parent: parentNav,
   admin: adminNav,
-  'super-admin': [],
 }
 
 export const roleDashboardPaths: Record<UserRole, string> = {
@@ -109,7 +108,6 @@ export const roleDashboardPaths: Record<UserRole, string> = {
   teacher: '/teacher',
   parent: '/parent',
   admin: '/admin',
-  'super-admin': '/super-admin',
 }
 
 export const roleLabels: Record<UserRole, string> = {
@@ -117,7 +115,6 @@ export const roleLabels: Record<UserRole, string> = {
   teacher: 'Teacher',
   parent: 'Parent',
   admin: 'Administrator',
-  'super-admin': 'Super Admin',
 }
 
 export const APP_NAME = 'LearnFlow'

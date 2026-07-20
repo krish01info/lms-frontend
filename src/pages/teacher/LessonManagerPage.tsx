@@ -78,6 +78,7 @@ const TYPE_BADGE_VARIANTS: Record<LessonType, 'default' | 'secondary' | 'outline
 
 export function LessonManagerPage() {
   const { courseId } = useParams<{ courseId: string }>()
+  const navigate = useNavigate()
 
   const courseQuery = useCourse(courseId)
   const lessonsQuery = useLessons(courseId)

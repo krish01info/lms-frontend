@@ -98,8 +98,7 @@ export function QuizTakePage() {
         icon={Loader2}
         title="Could not load quiz"
         description="Something went wrong loading this quiz. Please try again."
-        actionLabel="Retry"
-        onAction={() => window.location.reload()}
+        action={<Button onClick={() => window.location.reload()}>Retry</Button>}
       />
     )
   }
@@ -110,8 +109,7 @@ export function QuizTakePage() {
         icon={Flag}
         title="No questions"
         description="This quiz doesn't have any questions yet."
-        actionLabel="Back to Quizzes"
-        onAction={() => navigate('/student/quizzes')}
+        action={<Button onClick={() => navigate('/student/quizzes')}>Back to Quizzes</Button>}
       />
     )
   }

@@ -11,6 +11,7 @@ import { Label } from '@/components/ui/label'
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
 import { AuthLayout } from '@/components/layout/AuthLayout'
 import { useAuth, getDashboardPath } from '@/contexts/AuthContext'
+import type { UserRole } from '@/types'
 import { toast } from 'sonner'
 
 const loginSchema = z.object({
@@ -114,7 +115,7 @@ export function LoginPage() {
 
         <div className="space-y-2">
           <Label>Role</Label>
-          <Select value={watch('role')} onValueChange={(v) => setValue('role', v as 'student' | 'teacher' | 'parent' | 'admin')}>
+          <Select value={watch('role')} onValueChange={(v) => setValue('role', v as UserRole)}>
             <SelectTrigger>
               <SelectValue placeholder="Select role" />
             </SelectTrigger>

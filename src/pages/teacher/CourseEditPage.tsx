@@ -37,7 +37,7 @@ export function CourseEditPage() {
     reset,
     setValue,
     watch,
-    formState: { errors },
+    formState: { errors, isDirty },
   } = useForm<EditCourseValues>({ resolver: zodResolver(schema) })
 
   const course = courseQuery.data

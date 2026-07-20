@@ -44,8 +44,7 @@ export function QuizzesPage() {
           icon={HelpCircle}
           title="Could not load quizzes"
           description="Something went wrong. Please try again later."
-          actionLabel="Retry"
-          onAction={() => window.location.reload()}
+          action={<Button onClick={() => window.location.reload()}>Retry</Button>}
         />
       </div>
     )
