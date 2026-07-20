@@ -1,14 +1,17 @@
-import { useMemo, useState } from 'react'
+import { useEffect, useMemo, useState } from 'react'
 import { motion } from 'framer-motion'
 import {
   BookOpen,
   Bot,
   Brain,
+  Check,
   Clock,
   Lightbulb,
   Loader2,
   Send,
   Sparkles,
+  Trash2,
+  Upload,
   User,
 } from 'lucide-react'
 import { PageHeader } from '@/components/common/PageHeader'
@@ -20,6 +23,8 @@ import { ScrollArea } from '@/components/ui/scroll-area'
 import { Textarea } from '@/components/ui/textarea'
 import { useAuth } from '@/contexts/AuthContext'
 import { cn } from '@/utils/cn'
+import api from '@/services/api'
+import { toast } from 'sonner'
 
 type TutorMessage = {
   id: string
@@ -28,11 +33,17 @@ type TutorMessage = {
   timestamp: string
 }
 
-const subjects = ['Mathematics', 'Science', 'English', 'History']
+interface AIDocument {
+  id: string
+  title: string
+  originalName: string
+  status: 'PROCESSING' | 'READY' | 'FAILED'
+  createdAt: string
+}
 
 const suggestedPrompts = [
-  'Explain quadratic equations with an example',
-  'Quiz me on today\'s science topic',
+  'Explain deep learning',
+  "Quiz me on today's science topic",
   'Summarize my lesson in simple points',
   'Help me plan a 30-minute study session',
 ]
@@ -77,7 +88,7 @@ function TutorMessageBubble({ message }: { message: TutorMessage }) {
             : 'rounded-bl-md bg-muted'
         )}
       >
-        <p className="leading-relaxed">{message.content}</p>
+        <p className="leading-relaxed whitespace-pre-wrap">{message.content}</p>
         <p
           className={cn(
             'mt-2 text-[10px]',
@@ -100,17 +111,113 @@ function TutorMessageBubble({ message }: { message: TutorMessage }) {
 
 export function AITutorPage() {
   const { user } = useAuth()
-  const [activeSubject, setActiveSubject] = useState(subjects[0])
   const [message, setMessage] = useState('')
   const [messages, setMessages] = useState<TutorMessage[]>(initialMessages)
   const [isThinking, setIsThinking] = useState(false)
+
+  // AI Knowledge Base state
+  const [documents, setDocuments] = useState<AIDocument[]>([])
+  const [selectedDocIds, setSelectedDocIds] = useState<string[]>([])
+  const [isLoadingDocs, setIsLoadingDocs] = useState(false)
+  const [isUploading, setIsUploading] = useState(false)
+  const [isDeleting, setIsDeleting] = useState<string | null>(null)
 
   const greeting = useMemo(() => {
     const firstName = user?.name?.split(' ')[0] || 'there'
     return `Personalized help for ${firstName}'s lessons`
   }, [user?.name])
 
-  const sendMessage = (content: string) => {
+  // Fetch documents from backend on mount
+  const fetchDocuments = async (silent = false) => {
+    if (!silent) setIsLoadingDocs(true)
+    try {
+      const { data } = await api.get('/ai-tutor/documents')
+      const docList: AIDocument[] = data.data?.documents || []
+      setDocuments(docList)
+      
+      // Auto-select newly uploaded or ready documents if nothing is selected
+      setSelectedDocIds((prevSelected) => {
+        const readyIds = docList.filter((d) => d.status === 'READY').map((d) => d.id)
+        if (prevSelected.length === 0) {
+          return readyIds
+        }
+        // Filter out any selected IDs that no longer exist
+        return prevSelected.filter((id) => docList.some((d) => d.id === id))
+      })
+    } catch (err: any) {
+      toast.error(err.response?.data?.message || 'Failed to fetch learning materials')
+    } finally {
+      setIsLoadingDocs(false)
+    }
+  }
+
+  useEffect(() => {
+    fetchDocuments()
+
+    // Poll document indexing status if any document is processing
+    const interval = setInterval(() => {
+      setDocuments((currentDocs) => {
+        const hasProcessing = currentDocs.some((doc) => doc.status === 'PROCESSING')
+        if (hasProcessing) {
+          fetchDocuments(true)
+        }
+        return currentDocs
+      })
+    }, 4000)
+
+    return () => clearInterval(interval)
+  }, [])
+
+  const handleFileUpload = async (event: React.ChangeEvent<HTMLInputElement>) => {
+    const file = event.target.files?.[0]
+    if (!file) return
+
+    if (file.type !== 'application/pdf') {
+      toast.error('Only PDF files are supported for AI tutoring')
+      return
+    }
+
+    const formData = new FormData()
+    formData.append('pdf', file)
+
+    setIsUploading(true)
+    try {
+      await api.post('/ai-tutor/documents', formData, {
+        headers: {
+          'Content-Type': 'multipart/form-data',
+        },
+      })
+      toast.success('Document uploaded successfully! Indexing has started.')
+      await fetchDocuments()
+    } catch (err: any) {
+      toast.error(err.response?.data?.message || 'Failed to upload document')
+    } finally {
+      setIsUploading(false)
+      if (event.target) event.target.value = ''
+    }
+  }
+
+  const handleDeleteDocument = async (id: string) => {
+    setIsDeleting(id)
+    try {
+      await api.delete(`/ai-tutor/documents/${id}`)
+      toast.success('Document deleted successfully')
+      setSelectedDocIds((prev) => prev.filter((docId) => docId !== id))
+      await fetchDocuments()
+    } catch (err: any) {
+      toast.error(err.response?.data?.message || 'Failed to delete document')
+    } finally {
+      setIsDeleting(null)
+    }
+  }
+
+  const toggleDocSelection = (id: string) => {
+    setSelectedDocIds((prev) =>
+      prev.includes(id) ? prev.filter((docId) => docId !== id) : [...prev, id]
+    )
+  }
+
+  const sendMessage = async (content: string) => {
     const trimmed = content.trim()
     if (!trimmed || isThinking) return
 
@@ -118,23 +225,70 @@ export function AITutorPage() {
       id: `student-${Date.now()}`,
       role: 'student',
       content: trimmed,
-      timestamp: 'Now',
+      timestamp: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
     }
 
     setMessages((current) => [...current, studentMessage])
     setMessage('')
     setIsThinking(true)
 
-    window.setTimeout(() => {
+    try {
+      // Backend throws 400 if no documents are uploaded
+      const readyDocs = documents.filter((d) => d.status === 'READY')
+      if (readyDocs.length === 0) {
+        setIsThinking(false)
+        const noDocsMessage: TutorMessage = {
+          id: `tutor-${Date.now()}`,
+          role: 'tutor',
+          content: 'Please upload at least one PDF study document in the **Knowledge Base** panel on the left so I have source material to tutor you on!',
+          timestamp: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
+        }
+        setMessages((current) => [...current, noDocsMessage])
+        return
+      }
+
+      // Filter selections to only ready documents
+      const activeSelections = selectedDocIds.filter((id) =>
+        readyDocs.some((d) => d.id === id)
+      )
+
+      const { data } = await api.post('/ai-tutor/chat', {
+        question: trimmed,
+        documentIds: activeSelections.length > 0 ? activeSelections : undefined,
+      })
+
+      const responseData = data.data
+      let finalContent = responseData.answer
+
+      // Append source references cleanly if they exist
+      if (responseData.sources && responseData.sources.length > 0) {
+        finalContent += '\n\n**Sources Referenced:**'
+        responseData.sources.forEach((src: any, index: number) => {
+          const pageStr = src.page ? ` (page ${src.page})` : ''
+          finalContent += `\n${index + 1}. *${src.title}*${pageStr} — *${src.snippet.trim()}...*`
+        })
+      }
+
       const tutorMessage: TutorMessage = {
         id: `tutor-${Date.now()}`,
         role: 'tutor',
-        content: `Great question. For ${activeSubject}, I would start by identifying the key idea, then work through one example, and finally test your understanding with a short practice question. Backend AI responses can replace this placeholder later.`,
-        timestamp: 'Now',
+        content: finalContent,
+        timestamp: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
       }
       setMessages((current) => [...current, tutorMessage])
+    } catch (err: any) {
+      const errMsg = err.response?.data?.message || 'Failed to get AI Tutor response.'
+      toast.error(errMsg)
+      const errorTutorMessage: TutorMessage = {
+        id: `tutor-${Date.now()}`,
+        role: 'tutor',
+        content: `Sorry, I encountered an error connecting to the AI backend:\n\n*${errMsg}*`,
+        timestamp: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
+      }
+      setMessages((current) => [...current, errorTutorMessage])
+    } finally {
       setIsThinking(false)
-    }, 700)
+    }
   }
 
   return (
@@ -148,24 +302,118 @@ export function AITutorPage() {
 
       <div className="grid gap-6 xl:grid-cols-[320px_1fr]">
         <div className="space-y-6">
-          <Card>
-            <CardHeader>
-              <CardTitle className="text-base">Study Focus</CardTitle>
+          {/* Knowledge Base Card */}
+          <Card className="shadow-sm">
+            <CardHeader className="pb-3">
+              <CardTitle className="flex items-center justify-between text-base">
+                <span className="flex items-center gap-2">
+                  <BookOpen className="h-4 w-4 text-primary" />
+                  Knowledge Base
+                </span>
+                {isLoadingDocs && <Loader2 className="h-3.5 w-3.5 animate-spin text-muted-foreground" />}
+              </CardTitle>
+              <p className="text-xs text-muted-foreground">
+                Upload PDFs for your lessons. The AI Tutor will base its answers strictly on selected documents.
+              </p>
             </CardHeader>
-            <CardContent className="space-y-3">
-              {subjects.map((subject) => (
-                <button
-                  key={subject}
-                  onClick={() => setActiveSubject(subject)}
+            <CardContent className="space-y-4">
+              {/* File Uploader */}
+              <div className="relative">
+                <input
+                  type="file"
+                  id="pdf-upload"
+                  accept=".pdf"
+                  onChange={handleFileUpload}
+                  className="hidden"
+                  disabled={isUploading}
+                />
+                <label
+                  htmlFor="pdf-upload"
                   className={cn(
-                    'flex w-full items-center justify-between rounded-2xl border border-border px-4 py-3 text-left text-sm transition-colors hover:bg-muted/60',
-                    activeSubject === subject && 'border-primary/40 bg-primary/10 text-primary'
+                    'flex w-full cursor-pointer items-center justify-center gap-2 rounded-xl border border-dashed border-border py-4 text-xs font-semibold text-foreground transition-all hover:bg-muted/50 hover:border-primary/40',
+                    isUploading && 'pointer-events-none opacity-50'
                   )}
                 >
-                  <span className="font-medium">{subject}</span>
-                  {activeSubject === subject && <Sparkles className="h-4 w-4" />}
-                </button>
-              ))}
+                  {isUploading ? (
+                    <>
+                      <Loader2 className="h-4 w-4 animate-spin text-primary" />
+                      <span>Uploading & Indexing...</span>
+                    </>
+                  ) : (
+                    <>
+                      <Upload className="h-4 w-4 text-muted-foreground" />
+                      <span>Upload Study PDF</span>
+                    </>
+                  )}
+                </label>
+              </div>
+
+              {/* Documents List */}
+              <div className="space-y-2 max-h-[220px] overflow-y-auto pr-1">
+                {documents.length === 0 ? (
+                  <p className="text-center text-xs text-muted-foreground py-4">
+                    No documents uploaded yet.
+                  </p>
+                ) : (
+                  documents.map((doc) => (
+                    <div
+                      key={doc.id}
+                      className={cn(
+                        'group flex items-center justify-between rounded-xl border border-border p-2.5 transition-colors hover:bg-muted/20',
+                        selectedDocIds.includes(doc.id) && doc.status === 'READY' && 'border-primary/40 bg-primary/5'
+                      )}
+                    >
+                      <button
+                        onClick={() => toggleDocSelection(doc.id)}
+                        className="flex flex-1 items-center gap-2.5 text-left disabled:cursor-not-allowed"
+                        disabled={doc.status !== 'READY'}
+                      >
+                        <div
+                          className={cn(
+                            'flex h-4 w-4 shrink-0 items-center justify-center rounded border border-input transition-colors',
+                            selectedDocIds.includes(doc.id) && doc.status === 'READY' && 'border-primary bg-primary text-primary-foreground'
+                          )}
+                        >
+                          {selectedDocIds.includes(doc.id) && doc.status === 'READY' && (
+                            <Check className="h-3 w-3 stroke-[3px]" />
+                          )}
+                        </div>
+                        <div className="min-w-0 flex-1">
+                          <p className="truncate text-xs font-semibold text-foreground pr-1">
+                            {doc.title}
+                          </p>
+                          <div className="text-[10px] text-muted-foreground flex items-center gap-1 mt-0.5">
+                            {doc.status === 'READY' && (
+                              <span className="text-green-600 font-semibold">Ready</span>
+                            )}
+                            {doc.status === 'PROCESSING' && (
+                              <span className="text-amber-600 animate-pulse flex items-center gap-1">
+                                <Loader2 className="h-2 w-2 animate-spin" /> Indexing
+                              </span>
+                            )}
+                            {doc.status === 'FAILED' && (
+                              <span className="text-red-500 font-semibold">Failed</span>
+                            )}
+                          </div>
+                        </div>
+                      </button>
+                      <Button
+                        size="icon"
+                        variant="ghost"
+                        className="h-7 w-7 opacity-0 group-hover:opacity-100 hover:bg-destructive/10 hover:text-destructive transition-all shrink-0"
+                        onClick={() => handleDeleteDocument(doc.id)}
+                        disabled={isDeleting === doc.id}
+                      >
+                        {isDeleting === doc.id ? (
+                          <Loader2 className="h-3 w-3.5 animate-spin" />
+                        ) : (
+                          <Trash2 className="h-3.5 w-3.5" />
+                        )}
+                      </Button>
+                    </div>
+                  ))
+                )}
+              </div>
             </CardContent>
           </Card>
 
@@ -194,17 +442,20 @@ export function AITutorPage() {
                 <Clock className="h-4 w-4 text-primary" />
                 Quick Prompts
               </CardTitle>
+              <p className="text-sm text-muted-foreground">
+                Start with one tap, then refine your question in chat.
+              </p>
             </CardHeader>
-            <CardContent className="space-y-2">
+            <CardContent className="space-y-3">
               {suggestedPrompts.map((prompt) => (
-                <Button
+                <button
                   key={prompt}
-                  variant="ghost"
-                  className="h-auto w-full justify-start rounded-2xl px-3 py-2 text-left text-sm"
+                  className="flex w-full items-center gap-3 rounded-2xl border border-border bg-muted/40 px-4 py-3 text-left text-sm font-medium transition-colors hover:border-primary/40 hover:bg-primary/10 hover:text-primary"
                   onClick={() => sendMessage(prompt)}
                 >
+                  <Sparkles className="h-4 w-4 shrink-0 text-primary" />
                   {prompt}
-                </Button>
+                </button>
               ))}
             </CardContent>
           </Card>
@@ -221,20 +472,20 @@ export function AITutorPage() {
                 </Avatar>
                 <div>
                   <p className="font-medium">LearnLMS Tutor</p>
-                  <p className="text-xs text-muted-foreground">{activeSubject} mode</p>
+                  <p className="text-xs text-muted-foreground">Learning assistant</p>
                 </div>
               </div>
-              <Badge variant="outline">Preview</Badge>
+              <Badge variant="outline">Live</Badge>
             </div>
 
             <ScrollArea className="flex-1 p-4">
-              <div className="space-y-4">
+              <div className="space-y-4 font-sans">
                 {messages.map((item) => (
                   <TutorMessageBubble key={item.id} message={item} />
                 ))}
                 {isThinking && (
                   <div className="flex items-center gap-2 text-sm text-muted-foreground">
-                    <Loader2 className="h-4 w-4 animate-spin" />
+                    <Loader2 className="h-4 w-4 animate-spin animate-duration-1000" />
                     Tutor is thinking...
                   </div>
                 )}
