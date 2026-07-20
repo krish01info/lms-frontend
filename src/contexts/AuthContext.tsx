@@ -11,6 +11,7 @@ interface AuthContextType {
   register: (name: string, email: string, password: string, role: UserRole) => Promise<void>
   logout: () => void
   switchRole: (role: UserRole) => void
+  updateUser: (updates: Partial<Pick<User, 'name' | 'avatar'>>) => void
 }
 
 const AuthContext = createContext<AuthContextType | undefined>(undefined)
@@ -76,6 +77,13 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     console.warn('switchRole is a dev-only feature. Not supported with real backend.')
   }
 
+  const updateUser = (updates: Partial<Pick<User, 'name' | 'avatar'>>) => {
+    setUser((prev) => (prev ? { ...prev, ...updates } : prev))
+    if (user) {
+      localStorage.setItem(AUTH_KEY, JSON.stringify({ ...user, ...updates }))
+    }
+  }
+
   return (
     <AuthContext.Provider
       value={{
@@ -86,6 +94,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         register,
         logout,
         switchRole,
+        updateUser,
       }}
     >
       {children}
