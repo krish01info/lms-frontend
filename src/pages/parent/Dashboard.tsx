@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react'
 import {
-  Baby, BookOpen, CreditCard, Link2, MessageSquare, TrendingUp,
+  Baby, BookOpen, Link2, MessageSquare, TrendingUp,
   Users, X, CheckCircle2, AlertCircle, Loader2, Plus
 } from 'lucide-react'
 import { ChartCard, CircularProgress } from '@/components/common/Charts'
