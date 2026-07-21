@@ -1,6 +1,4 @@
-import { motion } from 'framer-motion'
 import {
-  Award,
   BookOpen,
   Calendar,
   GraduationCap,
@@ -22,15 +20,6 @@ import { Separator } from '@/components/ui/separator'
 import api from '@/services/api'
 import { transformCourse } from '@/utils/transformers'
 import type { User } from '@/types'
-
-// NOTE: sample data — no backend model for achievements yet
-const achievements = [
-  { title: 'Dean\'s List', description: 'Top 15% GPA for 2 semesters', icon: Trophy, earned: true },
-  { title: 'Perfect Attendance', description: '100% attendance in English', icon: Calendar, earned: true },
-  { title: 'Quiz Master', description: 'Score 90%+ on 5 quizzes', icon: GraduationCap, earned: false },
-  { title: 'Course Champion', description: 'Complete all 4 courses', icon: BookOpen, earned: false },
-  { title: 'Scholar Award', description: 'Maintain 3.8+ GPA', icon: Award, earned: true },
-]
 
 export function ProfilePage() {
   // Live profile data
@@ -175,79 +164,44 @@ export function ProfilePage() {
         </CardContent>
       </Card>
 
-      <div className="grid gap-4 sm:grid-cols-4">
-        <StatCard label="GPA" value="3.85" trend="up" change="Sample data" icon={Award} />
+      <div className="grid gap-4 sm:grid-cols-3">
         <StatCard label="Courses" value={courses.length} icon={BookOpen} iconClassName="bg-secondary/10" />
         <StatCard label="Attendance" value={`${attendancePercentage}%`} icon={Calendar} iconClassName="bg-emerald-500/10" />
         <StatCard label="Avg. Progress" value={`${avgProgress}%`} icon={Trophy} />
       </div>
 
-      <div className="grid gap-6 lg:grid-cols-2">
-        <Card>
-          <CardHeader>
-            <CardTitle className="text-base">Enrolled Courses</CardTitle>
-          </CardHeader>
-          <CardContent className="space-y-4">
-            {courses.length === 0 ? (
-              <p className="text-sm text-muted-foreground py-4 text-center">
-                No enrolled courses yet.
-              </p>
-            ) : (
-              courses.map((course: any) => {
-                const coursePercentage: number = progressByCourseId.get(course.id) ?? 0
-                return (
-                  <div key={course.id} className="flex items-center gap-4">
-                    <img
-                      src={course.image}
-                      alt={course.title}
-                      className="h-12 w-12 rounded-xl object-cover"
-                    />
-                    <div className="flex-1 space-y-1.5">
-                      <div className="flex justify-between text-sm">
-                        <span className="font-medium line-clamp-1">{course.title}</span>
-                        <span className="text-muted-foreground shrink-0 ml-2">{coursePercentage}%</span>
-                      </div>
-                      <Progress value={coursePercentage} className="h-1.5" />
+      <Card>
+        <CardHeader>
+          <CardTitle className="text-base">Enrolled Courses</CardTitle>
+        </CardHeader>
+        <CardContent className="space-y-4">
+          {courses.length === 0 ? (
+            <p className="text-sm text-muted-foreground py-4 text-center">
+              No enrolled courses yet.
+            </p>
+          ) : (
+            courses.map((course: any) => {
+              const coursePercentage: number = progressByCourseId.get(course.id) ?? 0
+              return (
+                <div key={course.id} className="flex items-center gap-4">
+                  <img
+                    src={course.image}
+                    alt={course.title}
+                    className="h-12 w-12 rounded-xl object-cover"
+                  />
+                  <div className="flex-1 space-y-1.5">
+                    <div className="flex justify-between text-sm">
+                      <span className="font-medium line-clamp-1">{course.title}</span>
+                      <span className="text-muted-foreground shrink-0 ml-2">{coursePercentage}%</span>
                     </div>
+                    <Progress value={coursePercentage} className="h-1.5" />
                   </div>
-                )
-              })
-            )}
-          </CardContent>
-        </Card>
-
-        <Card>
-          <CardHeader>
-            <CardTitle className="text-base">Achievements (sample)</CardTitle>
-          </CardHeader>
-          <CardContent className="space-y-3">
-            {achievements.map((achievement, i) => (
-              <motion.div
-                key={achievement.title}
-                initial={{ opacity: 0, x: 10 }}
-                animate={{ opacity: 1, x: 0 }}
-                transition={{ delay: i * 0.05 }}
-                className="flex items-center gap-4 rounded-2xl border border-border p-4"
-              >
-                <div className={`flex h-10 w-10 items-center justify-center rounded-xl ${achievement.earned ? 'bg-amber-500/10' : 'bg-muted'}`}>
-                  <achievement.icon className={`h-5 w-5 ${achievement.earned ? 'text-amber-600' : 'text-muted-foreground'}`} />
                 </div>
-                <div className="flex-1">
-                  <p className={`text-sm font-medium ${!achievement.earned && 'text-muted-foreground'}`}>
-                    {achievement.title}
-                  </p>
-                  <p className="text-xs text-muted-foreground">{achievement.description}</p>
-                </div>
-                {achievement.earned ? (
-                  <Badge variant="success">Earned</Badge>
-                ) : (
-                  <Badge variant="outline">Locked</Badge>
-                )}
-              </motion.div>
-            ))}
-          </CardContent>
-        </Card>
-      </div>
+              )
+            })
+          )}
+        </CardContent>
+      </Card>
 
       <Card>
         <CardHeader>
