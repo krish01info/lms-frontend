@@ -46,19 +46,44 @@ export function CreateCoursePage() {
   const [uploadStage, setUploadStage] = useState('')
 
   const handleVideoChange = (e: React.ChangeEvent<HTMLInputElement>) => {
-    if (e.target.files?.[0]) setVideoFile(e.target.files[0])
+    const file = e.target.files?.[0]
+    if (file) {
+      const MAX_VIDEO_SIZE_MB = 500
+      if (file.size > MAX_VIDEO_SIZE_MB * 1024 * 1024) {
+        toast.error(`Video file size must be under ${MAX_VIDEO_SIZE_MB} MB`)
+        e.target.value = ''
+        return
+      }
+      setVideoFile(file)
+    }
   }
 
   const handleThumbnailChange = (e: React.ChangeEvent<HTMLInputElement>) => {
-    if (e.target.files?.[0]) {
-      setThumbnailFile(e.target.files[0])
-      setThumbnailPreview(URL.createObjectURL(e.target.files[0]))
+    const file = e.target.files?.[0]
+    if (file) {
+      const MAX_THUMBNAIL_SIZE_MB = 5
+      if (file.size > MAX_THUMBNAIL_SIZE_MB * 1024 * 1024) {
+        toast.error(`Thumbnail image size must be under ${MAX_THUMBNAIL_SIZE_MB} MB`)
+        e.target.value = ''
+        return
+      }
+      setThumbnailFile(file)
+      setThumbnailPreview(URL.createObjectURL(file))
     }
   }
 
   const handleResourceChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     if (e.target.files) {
-      setResourceFiles(prev => [...prev, ...Array.from(e.target.files!)])
+      const selected = Array.from(e.target.files)
+      const MAX_RESOURCE_SIZE_MB = 10
+      const valid = selected.filter((file) => {
+        if (file.size > MAX_RESOURCE_SIZE_MB * 1024 * 1024) {
+          toast.error(`Resource "${file.name}" exceeds ${MAX_RESOURCE_SIZE_MB} MB limit`)
+          return false
+        }
+        return true
+      })
+      setResourceFiles((prev) => [...prev, ...valid])
     }
   }
 

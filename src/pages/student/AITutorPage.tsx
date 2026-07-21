@@ -177,6 +177,12 @@ export function AITutorPage() {
       return
     }
 
+    const MAX_PDF_SIZE_MB = 20
+    if (file.size > MAX_PDF_SIZE_MB * 1024 * 1024) {
+      toast.error(`PDF file size must be under ${MAX_PDF_SIZE_MB} MB`)
+      return
+    }
+
     const formData = new FormData()
     formData.append('pdf', file)
 
@@ -233,19 +239,7 @@ export function AITutorPage() {
     setIsThinking(true)
 
     try {
-      // Backend throws 400 if no documents are uploaded
       const readyDocs = documents.filter((d) => d.status === 'READY')
-      if (readyDocs.length === 0) {
-        setIsThinking(false)
-        const noDocsMessage: TutorMessage = {
-          id: `tutor-${Date.now()}`,
-          role: 'tutor',
-          content: 'Please upload at least one PDF study document in the **Knowledge Base** panel on the left so I have source material to tutor you on!',
-          timestamp: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
-        }
-        setMessages((current) => [...current, noDocsMessage])
-        return
-      }
 
       // Filter selections to only ready documents
       const activeSelections = selectedDocIds.filter((id) =>
@@ -313,7 +307,7 @@ export function AITutorPage() {
                 {isLoadingDocs && <Loader2 className="h-3.5 w-3.5 animate-spin text-muted-foreground" />}
               </CardTitle>
               <p className="text-xs text-muted-foreground">
-                Upload PDFs for your lessons. The AI Tutor will base its answers strictly on selected documents.
+                Upload study PDFs (max 20 MB). The AI Tutor uses selected documents for context, or provides general learning help.
               </p>
             </CardHeader>
             <CardContent className="space-y-4">
