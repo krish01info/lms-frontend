@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react'
 import {
-  Baby, BookOpen, Link2, MessageSquare, TrendingUp,
-  Users, X, CheckCircle2, AlertCircle, Loader2, Plus
+  Baby, BookOpen, Link2, TrendingUp,
+  Users, X, CheckCircle2, AlertCircle, Loader2, Plus, Brain, Award
 } from 'lucide-react'
 import { ChartCard, CircularProgress } from '@/components/common/Charts'
 import { PageHeader } from '@/components/common/PageHeader'
@@ -10,6 +10,7 @@ import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
+import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar'
 import { useAuth } from '@/contexts/AuthContext'
 import api from '@/services/api'
 import { toast } from 'sonner'
@@ -105,6 +106,17 @@ export function ParentDashboard() {
     value: c.percentage,
   })) || []
 
+  const getInitials = (name: string) => {
+    return name
+      ? name
+          .split(' ')
+          .map((n) => n[0])
+          .join('')
+          .toUpperCase()
+          .slice(0, 2)
+      : 'ST'
+  }
+
   return (
     <div className="space-y-6">
       <PageHeader
@@ -140,19 +152,25 @@ export function ParentDashboard() {
         </Card>
       ) : (
         <>
-          {/* Child tabs */}
+          {/* Child tabs with avatars */}
           <div className="flex flex-wrap gap-2 items-center">
             {children.map((child) => (
               <div key={child.id} className="flex items-center gap-1">
                 <button
                   onClick={() => setSelectedChild(child)}
-                  className={`px-4 py-2 rounded-xl text-sm font-medium border transition-all ${
+                  className={`flex items-center gap-2 px-3.5 py-1.5 rounded-xl text-sm font-medium border transition-all ${
                     selectedChild?.id === child.id
                       ? 'bg-primary text-primary-foreground border-primary shadow'
                       : 'bg-muted border-border hover:border-primary/50'
                   }`}
                 >
-                  {child.name}
+                  <Avatar className="h-6 w-6">
+                    <AvatarImage src={child.avatar} alt={child.name} />
+                    <AvatarFallback className="text-[10px] bg-background text-foreground">
+                      {getInitials(child.name)}
+                    </AvatarFallback>
+                  </Avatar>
+                  <span>{child.name}</span>
                 </button>
                 <button
                   onClick={() => handleUnlink(child.id)}
@@ -201,9 +219,10 @@ export function ParentDashboard() {
                   iconClassName="bg-secondary/10"
                 />
                 <StatCard
-                  label="Unread Messages"
-                  value="—"
-                  icon={MessageSquare}
+                  label="Quizzes Passed"
+                  value={`${overview.stats.quizPassed}/${overview.stats.quizTotal}`}
+                  icon={Brain}
+                  iconClassName="bg-purple-500/10"
                 />
               </div>
 
@@ -211,7 +230,7 @@ export function ParentDashboard() {
               <div className="grid gap-6 lg:grid-cols-3">
                 <Card className="flex flex-col items-center justify-center p-8">
                   <CircularProgress value={overview.stats.attendancePercentage} label="Attendance" />
-                  <p className="mt-4 text-sm text-muted-foreground text-center">
+                  <p className="mt-4 text-sm font-medium text-center">
                     {overview.child.name}
                   </p>
                   <span className={`mt-1 text-xs font-medium px-2 py-0.5 rounded-full ${
@@ -234,8 +253,8 @@ export function ParentDashboard() {
                 </div>
               </div>
 
-              {/* Courses list + Recent assignments */}
-              <div className="grid gap-6 lg:grid-cols-2">
+              {/* Courses list + Recent assignments + Quiz Results */}
+              <div className="grid gap-6 lg:grid-cols-3">
                 {/* Enrolled Courses */}
                 <Card>
                   <CardHeader>
@@ -254,7 +273,9 @@ export function ParentDashboard() {
                           {c.thumbnail ? (
                             <img src={c.thumbnail} alt={c.courseTitle} className="h-10 w-14 rounded-lg object-cover shrink-0" />
                           ) : (
-                            <div className="h-10 w-14 rounded-lg bg-muted shrink-0" />
+                            <div className="h-10 w-14 rounded-lg bg-muted shrink-0 flex items-center justify-center">
+                              <BookOpen className="h-4 w-4 text-muted-foreground" />
+                            </div>
                           )}
                           <div className="flex-1 min-w-0">
                             <p className="text-sm font-medium truncate">{c.courseTitle}</p>
@@ -277,7 +298,9 @@ export function ParentDashboard() {
                 {/* Recent Assignments */}
                 <Card>
                   <CardHeader>
-                    <CardTitle className="text-base">Recent Assignments</CardTitle>
+                    <CardTitle className="flex items-center gap-2 text-base">
+                      <Award className="h-4 w-4 text-primary" /> Recent Assignments
+                    </CardTitle>
                   </CardHeader>
                   <CardContent className="space-y-3">
                     {overview.recentAssignments.length === 0 ? (
@@ -306,6 +329,44 @@ export function ParentDashboard() {
                                 <AlertCircle className="h-3.5 w-3.5 text-amber-500" />
                                 <span className="text-xs text-muted-foreground">Pending</span>
                               </>
+                            )}
+                          </div>
+                        </div>
+                      ))
+                    )}
+                  </CardContent>
+                </Card>
+
+                {/* Recent Quiz Attempts */}
+                <Card>
+                  <CardHeader>
+                    <CardTitle className="flex items-center gap-2 text-base">
+                      <Brain className="h-4 w-4 text-purple-500" /> Quiz Results
+                    </CardTitle>
+                  </CardHeader>
+                  <CardContent className="space-y-3">
+                    {!overview.recentQuizzes || overview.recentQuizzes.length === 0 ? (
+                      <p className="text-sm text-muted-foreground text-center py-4">
+                        No quiz attempts recorded.
+                      </p>
+                    ) : (
+                      overview.recentQuizzes.map((q: any, i: number) => (
+                        <div key={i} className="flex items-center justify-between rounded-xl border p-3">
+                          <div className="min-w-0">
+                            <p className="text-sm font-medium truncate">{q.quizTitle}</p>
+                            <p className="text-xs text-muted-foreground">
+                              Pass Mark: {q.passMark}%
+                            </p>
+                          </div>
+                          <div className="flex items-center gap-1.5 shrink-0 ml-2">
+                            {q.passed ? (
+                              <span className="px-2 py-0.5 rounded-full text-xs font-semibold bg-emerald-500/10 text-emerald-600">
+                                {q.score}% (Passed)
+                              </span>
+                            ) : (
+                              <span className="px-2 py-0.5 rounded-full text-xs font-semibold bg-red-500/10 text-red-600">
+                                {q.score}% (Failed)
+                              </span>
                             )}
                           </div>
                         </div>
