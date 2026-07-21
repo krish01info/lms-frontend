@@ -38,6 +38,20 @@ export function CourseDetailPage() {
     enabled: !!id,
   })
 
+  // Same queryKey as ProgressPage/ProfilePage — shares cache
+  const { data: progressData, isLoading: progressLoading } = useQuery({
+    queryKey: ['progress-my'],
+    queryFn: async () => {
+      const res = await api.get('/progress/my')
+      return res.data.data.progress
+    },
+  })
+
+  const courseProgress = progressData?.find((p: any) => p.courseId === id)
+  const progressPercentage = courseProgress?.percentage ?? 0
+  const completedLessons = courseProgress?.completedLessons
+  const totalLessons = courseProgress?.totalLessons
+
   if (courseLoading) {
     return (
       <div className="space-y-6">
@@ -180,11 +194,22 @@ export function CourseDetailPage() {
           <Card>
             <CardHeader><CardTitle className="text-base">Your Progress</CardTitle></CardHeader>
             <CardContent className="space-y-4">
-              <div className="text-center">
-                <p className="text-4xl font-bold text-primary">{course.progress}%</p>
-                <p className="text-sm text-muted-foreground">Complete</p>
-              </div>
-              <Progress value={course.progress} className="h-3" />
+              {progressLoading ? (
+                <div className="h-24 rounded-xl bg-muted animate-pulse" />
+              ) : (
+                <>
+                  <div className="text-center">
+                    <p className="text-4xl font-bold text-primary">{progressPercentage}%</p>
+                    <p className="text-sm text-muted-foreground">Complete</p>
+                    {completedLessons !== undefined && totalLessons !== undefined && (
+                      <p className="text-xs text-muted-foreground mt-1">
+                        {completedLessons} of {totalLessons} lessons completed
+                      </p>
+                    )}
+                  </div>
+                  <Progress value={progressPercentage} className="h-3" />
+                </>
+              )}
               <Button className="w-full"><BookOpen className="mr-2 h-4 w-4" />Continue Learning</Button>
             </CardContent>
           </Card>
