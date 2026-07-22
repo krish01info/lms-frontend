@@ -30,13 +30,17 @@ export interface Course {
 export interface Assignment {
   id: string
   title: string
+  description: string
   course: string
+  courseId: string
   dueDate: string
   status: 'pending' | 'submitted' | 'graded' | 'overdue'
-  grade?: number
-  maxGrade: number
-  description: string
-  feedback?: string
+  submissionCount: number
+  grade: number | null
+  maxGrade?: number
+  feedback: string | null
+  submissionFileUrl: string | null
+  submittedAt: string | null
 }
 
 export interface Quiz {

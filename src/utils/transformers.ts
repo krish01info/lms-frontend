@@ -35,14 +35,24 @@ export function transformLesson(backendLesson: any) {
   }
 }
 
+// Transforms backend assignment shape → frontend Assignment shape
+// status/mySubmission now come directly from GET /assignments — no more
+// client-side pending/overdue guessing based on dueDate.
 export function transformAssignment(raw: any) {
-  const isOverdue = new Date(raw.dueDate) < new Date()
+  const submission = raw.mySubmission
+
   return {
     id: raw.id,
     title: raw.title,
+    description: raw.description || '',
     course: raw.course?.title ?? 'Unknown course',
+    courseId: raw.courseId,
     dueDate: raw.dueDate,
-    status: isOverdue ? 'overdue' : 'pending',
-    // grade/maxGrade omitted — not available from this endpoint
+    status: raw.status, // 'pending' | 'submitted' | 'graded' | 'overdue'
+    submissionCount: raw.submissionCount ?? 0,
+    grade: submission?.grade ?? null,
+    feedback: submission?.feedback ?? null,
+    submissionFileUrl: submission?.fileUrl ?? null,
+    submittedAt: submission?.createdAt ?? null,
   }
 }
