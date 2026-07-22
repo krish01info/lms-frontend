@@ -1,13 +1,18 @@
 import {
   BookOpen,
   Calendar,
+  Copy,
   GraduationCap,
   Mail,
   MapPin,
+  RefreshCw,
+  Share2,
+  Shield,
   Trophy,
   User as UserIcon,
 } from 'lucide-react'
-import { useQuery } from '@tanstack/react-query'
+import { useState } from 'react'
+import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { PageHeader } from '@/components/common/PageHeader'
 import { StatCard } from '@/components/common/StatCard'
 import { EmptyState } from '@/components/common/EmptyState'
@@ -20,8 +25,12 @@ import { Separator } from '@/components/ui/separator'
 import api from '@/services/api'
 import { transformCourse } from '@/utils/transformers'
 import type { User } from '@/types'
+import { toast } from 'sonner'
 
 export function ProfilePage() {
+  const queryClient = useQueryClient()
+  const [copied, setCopied] = useState(false)
+
   // Live profile data
   const {
     data: user,
@@ -71,6 +80,45 @@ export function ProfilePage() {
       return res.data.data
     },
   })
+
+  // Fetch existing parent invite code
+  const { data: inviteCodeData, isLoading: isCodeLoading } = useQuery({
+    queryKey: ['parent-invite-code'],
+    queryFn: async () => {
+      const res = await api.get('/users/parent-code')
+      return res.data.data as { code: string | null; expiresAt: string | null }
+    },
+  })
+
+  // Generate new invite code mutation
+  const generateCodeMutation = useMutation({
+    mutationFn: async () => {
+      const res = await api.post('/users/generate-parent-code')
+      return res.data.data as { code: string; expiresAt: string }
+    },
+    onSuccess: (data) => {
+      queryClient.setQueryData(['parent-invite-code'], data)
+      toast.success('New invite code generated!')
+    },
+    onError: (err: any) => {
+      toast.error(err.response?.data?.message || 'Failed to generate code.')
+    },
+  })
+
+  const handleCopy = (code: string) => {
+    navigator.clipboard.writeText(code)
+    setCopied(true)
+    toast.success('Code copied to clipboard!')
+    setTimeout(() => setCopied(false), 2000)
+  }
+
+  const getExpiryLabel = (expiresAt: string) => {
+    const diff = new Date(expiresAt).getTime() - Date.now()
+    if (diff <= 0) return 'Expired'
+    const hours = Math.floor(diff / (1000 * 60 * 60))
+    const minutes = Math.floor((diff % (1000 * 60 * 60)) / (1000 * 60))
+    return hours > 0 ? `Expires in ${hours}h ${minutes}m` : `Expires in ${minutes}m`
+  }
 
   const courses = courseData || []
   const progress = progressData || []
@@ -220,6 +268,72 @@ export function ProfilePage() {
           </div>
         </CardContent>
       </Card>
+
+      {/* ── Share with Parent ──────────────────────────────────────────────── */}
+      <Card className="border-primary/20 bg-gradient-to-br from-primary/5 to-secondary/5">
+        <CardHeader>
+          <CardTitle className="flex items-center gap-2 text-base">
+            <Shield className="h-4 w-4 text-primary" />
+            Share with Parent
+          </CardTitle>
+        </CardHeader>
+        <CardContent className="space-y-4">
+          <p className="text-sm text-muted-foreground">
+            Generate a one-time 6-character invite code. Share it with your parent so they can
+            link to your account and monitor your progress. The code expires in <strong>24 hours</strong> and
+            is invalidated after use.
+          </p>
+
+          {isCodeLoading ? (
+            <div className="h-14 rounded-xl bg-muted animate-pulse" />
+          ) : inviteCodeData?.code ? (
+            <div className="space-y-3">
+              {/* Code display */}
+              <div className="flex items-center gap-3 rounded-xl border border-primary/30 bg-background p-4">
+                <div className="flex-1">
+                  <p className="text-xs text-muted-foreground mb-1">Your invite code</p>
+                  <p className="text-3xl font-bold tracking-[0.4em] text-primary font-mono">
+                    {inviteCodeData.code}
+                  </p>
+                </div>
+                <Button
+                  variant="outline"
+                  size="sm"
+                  onClick={() => handleCopy(inviteCodeData.code!)}
+                  className="shrink-0"
+                >
+                  <Copy className="h-4 w-4 mr-1.5" />
+                  {copied ? 'Copied!' : 'Copy'}
+                </Button>
+              </div>
+              <div className="flex items-center justify-between">
+                <p className="text-xs text-muted-foreground">
+                  ⏱ {inviteCodeData.expiresAt ? getExpiryLabel(inviteCodeData.expiresAt) : ''}
+                </p>
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  onClick={() => generateCodeMutation.mutate()}
+                  disabled={generateCodeMutation.isPending}
+                >
+                  <RefreshCw className={`h-3.5 w-3.5 mr-1.5 ${generateCodeMutation.isPending ? 'animate-spin' : ''}`} />
+                  Regenerate
+                </Button>
+              </div>
+            </div>
+          ) : (
+            <Button
+              onClick={() => generateCodeMutation.mutate()}
+              disabled={generateCodeMutation.isPending}
+              className="w-full"
+            >
+              <Share2 className="h-4 w-4 mr-2" />
+              {generateCodeMutation.isPending ? 'Generating...' : 'Generate Invite Code'}
+            </Button>
+          )}
+        </CardContent>
+      </Card>
     </div>
+
   )
 }
