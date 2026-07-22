@@ -19,6 +19,7 @@ import { CourseDetailPage } from '@/pages/student/CourseDetailPage'
 import { AssignmentsPage } from '@/pages/student/AssignmentsPage'
 import { QuizzesPage } from '@/pages/student/QuizzesPage'
 import { QuizTakePage } from '@/pages/student/QuizTakePage'
+import { QuizResultsPage } from '@/pages/student/QuizResultsPage'
 import { AttendancePage } from '@/pages/student/AttendancePage'
 import { CalendarPage } from '@/pages/student/CalendarPage'
 import { FeesPage } from '@/pages/student/FeesPage'
@@ -36,20 +37,26 @@ import { AITutorPage } from '@/pages/student/AITutorPage'
 
 // Teacher
 import { TeacherDashboard } from '@/pages/teacher/Dashboard'
+import { QuizBuilderPage } from '@/pages/teacher/TeacherQuizzesPage'
+import { TeacherQuizQuestionsPage } from '@/pages/teacher/TeacherQuizQuestionsPage'
+import { QuizAnalyticsPage } from '@/pages/teacher/QuizAnalyticsPage'
+import { TeacherProfilePage } from '@/pages/teacher/ProfilePage'
+import { CourseEditPage } from '@/pages/teacher/CourseEditPage'
+import { LessonManagerPage } from '@/pages/teacher/LessonManagerPage'
+import { TeacherResourcesPage } from '@/pages/teacher/ResourcesPage'
+import { AssignmentSubmissionsPage } from '@/pages/teacher/AssignmentSubmissionsPage'
+import { TeacherNotificationsPage } from '@/pages/teacher/TeacherNotificationsPage'
+import { StudentPerformancePage } from '@/pages/teacher/StudentPerformancePage'
+import { TeacherMessagesPage } from '@/pages/teacher/TeacherMessagesPage'
+import { TeacherEnrollmentsPage } from '@/pages/teacher/TeacherEnrollmentsPage'
+import { TeacherSettingsPage } from '@/pages/teacher/TeacherSettingsPage'
 import {
   CreateCoursePage,
   TeacherCoursesPage,
   TeacherAssignmentsPage,
-  QuizBuilderPage,
   TeacherAttendancePage,
   GradebookPage,
   AnnouncementsPage,
-  PerformancePage,
-  TeacherMessagesPage,
-  TeacherAnalyticsPage,
-  TeacherResourcesPage,
-  TeacherProfilePage,
-  TeacherManageLessonsPage,
 } from '@/pages/teacher/Pages'
 
 // Parent
@@ -80,6 +87,23 @@ import {
   AuditLogsPage,
 } from '@/pages/admin/Pages'
 
+// Super Admin
+import {
+  SuperAdminDashboard,
+  OrganizationPage,
+  BranchesPage,
+  BranchAdminsPage,
+  SuperAdminTeachersPage,
+  SuperAdminStudentsPage,
+  SuperAdminParentsPage,
+  SuperAdminCoursesPage,
+  SuperAdminPaymentsPage,
+  SuperAdminReportsPage,
+  SuperAdminAnalyticsPage,
+  SuperAdminAnnouncementsPage,
+  SuperAdminSettingsPage,
+} from '@/pages/super-admin/Pages'
+
 const withSuspense = (element: React.ReactNode) => (
   <Suspense fallback={<PageSkeleton />}>{element}</Suspense>
 )
@@ -105,7 +129,9 @@ export const router = createBrowserRouter([
       { path: '/student/courses/:id', element: withSuspense(<CourseDetailPage />) },
       { path: '/student/assignments', element: withSuspense(<AssignmentsPage />) },
       { path: '/student/quizzes', element: withSuspense(<QuizzesPage />) },
-      { path: '/student/quizzes/take', element: withSuspense(<QuizTakePage />) },
+      { path: '/student/quizzes/take/:quizId', element: withSuspense(<QuizTakePage />) },
+      { path: '/student/quizzes/:quizId/results', element: withSuspense(<QuizResultsPage />) },
+      { path: '/student/ai-tutor', element: withSuspense(<AITutorPage />) },
       { path: '/student/attendance', element: withSuspense(<AttendancePage />) },
       { path: '/student/calendar', element: withSuspense(<CalendarPage />) },
       { path: '/student/fees', element: withSuspense(<FeesPage />) },
@@ -115,7 +141,6 @@ export const router = createBrowserRouter([
       { path: '/student/discussion', element: withSuspense(<DiscussionPage />) },
       { path: '/student/resources', element: withSuspense(<ResourcesPage />) },
       { path: '/student/certificates', element: withSuspense(<CertificatesPage />) },
-      { path: '/student/ai-tutor', element: withSuspense(<AITutorPage />) },
       { path: '/student/messages', element: withSuspense(<MessagesPage />) },
       { path: '/student/notifications', element: withSuspense(<NotificationsPage />) },
       { path: '/student/profile', element: withSuspense(<ProfilePage />) },
@@ -128,16 +153,24 @@ export const router = createBrowserRouter([
       { path: '/teacher', element: withSuspense(<TeacherDashboard />) },
       { path: '/teacher/create-course', element: withSuspense(<CreateCoursePage />) },
       { path: '/teacher/courses', element: withSuspense(<TeacherCoursesPage />) },
-      { path: '/teacher/courses/:courseId/lessons', element: withSuspense(<TeacherManageLessonsPage />) },
+
+      { path: '/teacher/courses/:courseId/edit', element: withSuspense(<CourseEditPage />) },
+      { path: '/teacher/courses/:courseId/lessons', element: withSuspense(<LessonManagerPage />) },
+
       { path: '/teacher/assignments', element: withSuspense(<TeacherAssignmentsPage />) },
+      { path: '/teacher/assignments/:assignmentId/submissions', element: withSuspense(<AssignmentSubmissionsPage />) },
       { path: '/teacher/quiz-builder', element: withSuspense(<QuizBuilderPage />) },
+      { path: '/teacher/quiz-builder/:quizId', element: withSuspense(<TeacherQuizQuestionsPage />) },
+      { path: '/teacher/quiz-builder/:quizId/analytics', element: withSuspense(<QuizAnalyticsPage />) },
       { path: '/teacher/attendance', element: withSuspense(<TeacherAttendancePage />) },
+      { path: '/teacher/notifications', element: withSuspense(<TeacherNotificationsPage />) },
       { path: '/teacher/gradebook', element: withSuspense(<GradebookPage />) },
       { path: '/teacher/announcements', element: withSuspense(<AnnouncementsPage />) },
-      { path: '/teacher/performance', element: withSuspense(<PerformancePage />) },
-      { path: '/teacher/messages', element: withSuspense(<TeacherMessagesPage />) },
-      { path: '/teacher/analytics', element: withSuspense(<TeacherAnalyticsPage />) },
       { path: '/teacher/resources', element: withSuspense(<TeacherResourcesPage />) },
+      { path: '/teacher/performance', element: withSuspense(<StudentPerformancePage />) },
+      { path: '/teacher/messages', element: withSuspense(<TeacherMessagesPage />) },
+      { path: '/teacher/enrollments', element: withSuspense(<TeacherEnrollmentsPage />) },
+      { path: '/teacher/settings', element: withSuspense(<TeacherSettingsPage />) },
       { path: '/teacher/profile', element: withSuspense(<TeacherProfilePage />) },
     ],
   },
@@ -169,6 +202,24 @@ export const router = createBrowserRouter([
       { path: '/admin/roles', element: withSuspense(<RolesPage />) },
       { path: '/admin/settings', element: withSuspense(<AdminSettingsPage />) },
       { path: '/admin/audit-logs', element: withSuspense(<AuditLogsPage />) },
+    ],
+  },
+  {
+    element: <ProtectedRoute allowedRoles={['super-admin']} />,
+    children: [
+      { path: '/super-admin', element: withSuspense(<SuperAdminDashboard />) },
+      { path: '/super-admin/organizations', element: withSuspense(<OrganizationPage />) },
+      { path: '/super-admin/branches', element: withSuspense(<BranchesPage />) },
+      { path: '/super-admin/branch-admins', element: withSuspense(<BranchAdminsPage />) },
+      { path: '/super-admin/teachers', element: withSuspense(<SuperAdminTeachersPage />) },
+      { path: '/super-admin/students', element: withSuspense(<SuperAdminStudentsPage />) },
+      { path: '/super-admin/parents', element: withSuspense(<SuperAdminParentsPage />) },
+      { path: '/super-admin/courses', element: withSuspense(<SuperAdminCoursesPage />) },
+      { path: '/super-admin/payments', element: withSuspense(<SuperAdminPaymentsPage />) },
+      { path: '/super-admin/reports', element: withSuspense(<SuperAdminReportsPage />) },
+      { path: '/super-admin/analytics', element: withSuspense(<SuperAdminAnalyticsPage />) },
+      { path: '/super-admin/announcements', element: withSuspense(<SuperAdminAnnouncementsPage />) },
+      { path: '/super-admin/settings', element: withSuspense(<SuperAdminSettingsPage />) },
     ],
   },
   { path: '*', element: <Navigate to="/" replace /> },

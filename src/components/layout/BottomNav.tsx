@@ -28,6 +28,12 @@ const bottomNavItems: Record<UserRole, { label: string; href: string; icon: type
     { label: 'Analytics', href: '/admin/analytics', icon: MessageSquare },
     { label: 'Profile', href: '/admin/settings', icon: User },
   ],
+  'super-admin': [
+    { label: 'Home', href: '/super-admin', icon: LayoutDashboard },
+    { label: 'Branches', href: '/super-admin/branches', icon: BookOpen },
+    { label: 'Admins', href: '/super-admin/branch-admins', icon: User },
+    { label: 'Profile', href: '/super-admin/settings', icon: User },
+  ],
 }
 
 interface BottomNavProps {

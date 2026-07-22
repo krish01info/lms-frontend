@@ -1,4 +1,4 @@
-export { PerformancePage as ParentPerformancePage } from '@/pages/teacher/Pages'
+export { ProgressPage as ParentPerformancePage } from '@/pages/student/ProgressPage'
 export { AttendancePage as ParentAttendancePage } from '@/pages/student/AttendancePage'
 export { AssignmentsPage as ParentAssignmentsPage } from '@/pages/student/AssignmentsPage'
 export { PaymentsPage as ParentPaymentsPage } from '@/pages/student/PaymentsPage'

@@ -6,6 +6,7 @@ import { Navbar } from './Navbar'
 import { Sidebar } from './Sidebar'
 import { navigationByRole } from '@/constants/navigation'
 import { useAuth } from '@/contexts/AuthContext'
+import { useUnreadCount } from '@/hooks/useNotificationData'
 
 interface DashboardLayoutProps {
   children?: ReactNode
@@ -14,6 +15,10 @@ interface DashboardLayoutProps {
 export function DashboardLayout({ children }: DashboardLayoutProps) {
   const { user } = useAuth()
   const [sidebarOpen, setSidebarOpen] = useState(false)
+  // Called unconditionally (before the early return below) to satisfy the
+  // Rules of Hooks — /notifications/me safely 401s if there's no user yet,
+  // react-query just treats it as an errored, ignorable query in that case.
+  const { data: unreadData } = useUnreadCount()
 
   if (!user) return null
 
@@ -23,7 +28,7 @@ export function DashboardLayout({ children }: DashboardLayoutProps) {
     <div className="flex min-h-screen bg-background">
       <Sidebar navItems={navItems} isOpen={sidebarOpen} onClose={() => setSidebarOpen(false)} />
       <div className="flex flex-1 flex-col">
-        <Navbar onMenuClick={() => setSidebarOpen(true)} />
+        <Navbar onMenuClick={() => setSidebarOpen(true)} notificationCount={unreadData?.count ?? 0} />
         <main className="flex-1 overflow-auto gradient-mesh p-4 pb-24 lg:p-6 lg:pb-6">
           <motion.div
             initial={{ opacity: 0, y: 10 }}
