@@ -1,6 +1,6 @@
-import { useMemo, useState } from 'react'
+import { useEffect, useMemo, useState } from 'react'
 import { motion } from 'framer-motion'
-import { Download, File, FileImage, FileText, FileVideo, FolderOpen } from 'lucide-react'
+import { Download, File, FileImage, FileText, FileVideo, FolderOpen, Loader2 } from 'lucide-react'
 import { EmptyState } from '@/components/common/EmptyState'
 import { PageHeader } from '@/components/common/PageHeader'
 import { SearchBar } from '@/components/common/SearchBar'
@@ -8,83 +8,76 @@ import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent } from '@/components/ui/card'
 import { Tabs, TabsList, TabsTrigger } from '@/components/ui/tabs'
-import { mockCourses } from '@/constants/mockData'
+import { transformResource } from '@/utils/transformers'
+import api from '@/services/api'
 import { cn } from '@/utils/cn'
+import type { Resource, ResourceType } from '@/types'
 
-const resources = [
-  {
-    id: '1',
-    title: 'Calculus Chapter 7 Notes',
-    course: 'Advanced Mathematics',
-    type: 'pdf' as const,
-    size: '2.4 MB',
-    downloads: 234,
-    updatedAt: '2026-06-20',
-  },
-  {
-    id: '2',
-    title: 'Wave Motion Lab Guide',
-    course: 'Physics: Mechanics & Waves',
-    type: 'pdf' as const,
-    size: '1.8 MB',
-    downloads: 189,
-    updatedAt: '2026-06-18',
-  },
-  {
-    id: '3',
-    title: 'Poetry Analysis Worksheet',
-    course: 'English Literature & Composition',
-    type: 'doc' as const,
-    size: '540 KB',
-    downloads: 156,
-    updatedAt: '2026-06-15',
-  },
-  {
-    id: '4',
-    title: 'Python Data Structures Cheatsheet',
-    course: 'Computer Science Fundamentals',
-    type: 'pdf' as const,
-    size: '890 KB',
-    downloads: 312,
-    updatedAt: '2026-06-22',
-  },
-  {
-    id: '5',
-    title: 'Physics Simulation Demo',
-    course: 'Physics: Mechanics & Waves',
-    type: 'video' as const,
-    size: '45 MB',
-    downloads: 98,
-    updatedAt: '2026-06-10',
-  },
-  {
-    id: '6',
-    title: 'Integration Techniques Slides',
-    course: 'Advanced Mathematics',
-    type: 'image' as const,
-    size: '3.2 MB',
-    downloads: 201,
-    updatedAt: '2026-06-24',
-  },
-]
-
-const typeIcons = {
+const typeIcons: Record<ResourceType, typeof FileText> = {
   pdf: FileText,
   doc: File,
   video: FileVideo,
   image: FileImage,
+  other: File,
 }
 
-const typeColors = {
+const typeColors: Record<ResourceType, string> = {
   pdf: 'bg-red-500/10 text-red-600',
   doc: 'bg-blue-500/10 text-blue-600',
   video: 'bg-purple-500/10 text-purple-600',
   image: 'bg-amber-500/10 text-amber-600',
+  other: 'bg-muted text-muted-foreground',
 }
 
 export function ResourcesPage() {
   const [search, setSearch] = useState('')
   const [typeFilter, setTypeFilter] = useState('all')
+  const [resources, setResources] = useState<Resource[]>([])
+  const [courseCount, setCourseCount] = useState(0)
+  const [isLoading, setIsLoading] = useState(true)
+  const [error, setError] = useState<string | null>(null)
+
+  useEffect(() => {
+    let cancelled = false
+
+    async function fetchResources() {
+      setIsLoading(true)
+      setError(null)
+      try {
+        const coursesRes = await api.get('/courses/enrolled')
+        const courses = coursesRes.data?.data?.courses ?? []
+
+        const perCourseResults = await Promise.all(
+          courses.map(async (course: any) => {
+            try {
+              const res = await api.get(`/courses/${course.id}/resources`)
+              const raw = res.data?.data?.resources ?? []
+              return raw.map((r: any) => transformResource(r, course.title))
+            } catch {
+              // If one course's resources fail to load, don't fail the whole page
+              return []
+            }
+          })
+        )
+
+        if (!cancelled) {
+          setResources(perCourseResults.flat())
+          setCourseCount(courses.length)
+        }
+      } catch (err: any) {
+        if (!cancelled) {
+          setError(err?.response?.data?.message || 'Failed to load resources')
+        }
+      } finally {
+        if (!cancelled) setIsLoading(false)
+      }
+    }
+
+    fetchResources()
+    return () => {
+      cancelled = true
+    }
+  }, [])
 
   const filtered = useMemo(() => {
     return resources.filter((r) => {
@@ -94,7 +87,7 @@ export function ResourcesPage() {
       const matchesType = typeFilter === 'all' || r.type === typeFilter
       return matchesSearch && matchesType
     })
-  }, [search, typeFilter])
+  }, [search, typeFilter, resources])
 
   return (
     <div className="space-y-6">
@@ -123,7 +116,14 @@ export function ResourcesPage() {
         </Tabs>
       </div>
 
-      {filtered.length === 0 ? (
+      {isLoading ? (
+        <div className="flex items-center justify-center py-16 text-muted-foreground">
+          <Loader2 className="mr-2 h-5 w-5 animate-spin" />
+          Loading resources...
+        </div>
+      ) : error ? (
+        <EmptyState icon={FolderOpen} title="Couldn't load resources" description={error} />
+      ) : filtered.length === 0 ? (
         <EmptyState
           icon={FolderOpen}
           title="No resources found"
@@ -156,12 +156,14 @@ export function ResourcesPage() {
 
                     <div className="mt-4 flex items-center justify-between text-xs text-muted-foreground">
                       <span>{resource.size}</span>
-                      <span>{resource.downloads} downloads</span>
+                      <span>By {resource.uploadedBy}</span>
                     </div>
 
-                    <Button variant="outline" className="mt-4 w-full gap-2">
-                      <Download className="h-4 w-4" />
-                      Download
+                    <Button variant="outline" className="mt-4 w-full gap-2" asChild>
+                      <a href={resource.fileUrl} target="_blank" rel="noopener noreferrer">
+                        <Download className="h-4 w-4" />
+                        Download
+                      </a>
                     </Button>
                   </CardContent>
                 </Card>
@@ -171,13 +173,15 @@ export function ResourcesPage() {
         </div>
       )}
 
-      <Card className="border-dashed">
-        <CardContent className="p-6 text-center">
-          <p className="text-sm text-muted-foreground">
-            Resources are organized by {mockCourses.length} enrolled courses. New materials are added weekly.
-          </p>
-        </CardContent>
-      </Card>
+      {!isLoading && !error && (
+        <Card className="border-dashed">
+          <CardContent className="p-6 text-center">
+            <p className="text-sm text-muted-foreground">
+              Resources are organized by {courseCount} enrolled course{courseCount !== 1 ? 's' : ''}. New materials are added as they're uploaded.
+            </p>
+          </CardContent>
+        </Card>
+      )}
     </div>
   )
 }
