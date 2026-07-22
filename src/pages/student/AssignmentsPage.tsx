@@ -1,13 +1,14 @@
-import { useMemo, useState } from 'react'
+import { useEffect, useMemo, useState } from 'react'
 import { motion } from 'framer-motion'
-import { ClipboardList } from 'lucide-react'
+import { ClipboardList, Loader2 } from 'lucide-react'
 import { AssignmentCard } from '@/components/common/AssignmentCard'
 import { EmptyState } from '@/components/common/EmptyState'
 import { PageHeader } from '@/components/common/PageHeader'
 import { SearchBar } from '@/components/common/SearchBar'
 import { Badge } from '@/components/ui/badge'
 import { Tabs, TabsList, TabsTrigger } from '@/components/ui/tabs'
-import { mockAssignments } from '@/constants/mockData'
+import { transformAssignment } from '@/utils/transformers'
+import api from '@/services/api'
 import type { Assignment } from '@/types'
 
 type StatusFilter = 'all' | Assignment['status']
@@ -23,18 +24,50 @@ const statusTabs: { value: StatusFilter; label: string }[] = [
 export function AssignmentsPage() {
   const [search, setSearch] = useState('')
   const [status, setStatus] = useState<StatusFilter>('all')
+  const [assignments, setAssignments] = useState<Assignment[]>([])
+  const [isLoading, setIsLoading] = useState(true)
+  const [error, setError] = useState<string | null>(null)
+
+  useEffect(() => {
+    let cancelled = false
+
+    async function fetchAssignments() {
+      setIsLoading(true)
+      setError(null)
+      try {
+        const res = await api.get('/assignments')
+        const raw = res.data?.data?.assignments ?? []
+        if (!cancelled) {
+          setAssignments(raw.map(transformAssignment))
+        }
+      } catch (err: any) {
+        if (!cancelled) {
+          setError(err?.response?.data?.message || 'Failed to load assignments')
+        }
+      } finally {
+        if (!cancelled) setIsLoading(false)
+      }
+    }
+
+    fetchAssignments()
+    return () => {
+      cancelled = true
+    }
+  }, [])
 
   const filtered = useMemo(() => {
-    return mockAssignments.filter((a) => {
+    return assignments.filter((a) => {
       const matchesSearch =
         a.title.toLowerCase().includes(search.toLowerCase()) ||
         a.course.toLowerCase().includes(search.toLowerCase())
       const matchesStatus = status === 'all' || a.status === status
       return matchesSearch && matchesStatus
     })
-  }, [search, status])
+  }, [search, status, assignments])
 
-  const pendingCount = mockAssignments.filter((a) => a.status === 'pending' || a.status === 'overdue').length
+  const pendingCount = assignments.filter(
+    (a) => a.status === 'pending' || a.status === 'overdue'
+  ).length
 
   return (
     <div className="space-y-6">
@@ -63,7 +96,18 @@ export function AssignmentsPage() {
         </Tabs>
       </div>
 
-      {filtered.length === 0 ? (
+      {isLoading ? (
+        <div className="flex items-center justify-center py-16 text-muted-foreground">
+          <Loader2 className="mr-2 h-5 w-5 animate-spin" />
+          Loading assignments...
+        </div>
+      ) : error ? (
+        <EmptyState
+          icon={ClipboardList}
+          title="Couldn't load assignments"
+          description={error}
+        />
+      ) : filtered.length === 0 ? (
         <EmptyState
           icon={ClipboardList}
           title="No assignments found"

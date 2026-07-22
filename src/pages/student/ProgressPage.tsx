@@ -1,6 +1,6 @@
 import { motion } from 'framer-motion'
 import { useQuery } from '@tanstack/react-query'
-import { BookOpen, Clock, Target, TrendingUp } from 'lucide-react'
+import { BookOpen, Clock, TrendingUp } from 'lucide-react'
 import { ChartCard } from '@/components/common/Charts'
 import { PageHeader } from '@/components/common/PageHeader'
 import { StatCard } from '@/components/common/StatCard'
@@ -9,14 +9,6 @@ import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Progress } from '@/components/ui/progress'
 import { weeklyProgressData } from '@/constants/mockData'
 import api from '@/services/api'
-
-// NOTE: no backend endpoint for learning goals yet — stays mock until built
-const learningGoals = [
-  { label: 'Weekly study hours', current: 24.5, target: 30, unit: 'hrs' },
-  { label: 'Assignments completed', current: 18, target: 22, unit: '' },
-  { label: 'Quizzes passed', current: 2, target: 4, unit: '' },
-  { label: 'Course modules done', current: 28, target: 44, unit: '' },
-]
 
 export function ProgressPage() {
   const { data: courseProgress, isLoading, isError } = useQuery({
@@ -57,11 +49,10 @@ export function ProgressPage() {
     <div className="space-y-6">
       <PageHeader title="Learning Progress" description="Track your growth across courses and subjects" />
 
-      <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
+      <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
         <StatCard label="Avg. Course Progress" value={`${avgProgress}%`} trend="up" icon={TrendingUp} />
-        <StatCard label="Study Hours" value={`${totalHours.toFixed(1)}h`} change="This week (mock)" icon={Clock} />
+        <StatCard label="Study Hours" value={`${totalHours.toFixed(1)}h`} change="This week" icon={Clock} />
         <StatCard label="Active Courses" value={courses.length} icon={BookOpen} iconClassName="bg-secondary/10" />
-        <StatCard label="Goals Met" value="3/4" change="75% (mock)" trend="up" icon={Target} iconClassName="bg-emerald-500/10" />
       </div>
 
       <div className="grid gap-6 lg:grid-cols-2">
@@ -120,46 +111,22 @@ export function ProgressPage() {
           </CardContent>
         </Card>
 
-        <div className="space-y-6">
-          {isAttendanceLoading ? (
-            <div className="h-60 rounded-xl bg-muted animate-pulse" />
-          ) : attendanceChart.length === 0 ? (
-            <Card>
-              <CardHeader>
-                <CardTitle className="text-base">Attendance Overview</CardTitle>
-              </CardHeader>
-              <CardContent>
-                <p className="text-sm text-muted-foreground py-6 text-center">
-                  No attendance data yet.
-                </p>
-              </CardContent>
-            </Card>
-          ) : (
-            <ChartCard title="Attendance Overview" data={attendanceChart} type="pie" dataKey="value" xKey="name" height={240} />
-          )}
-
+        {isAttendanceLoading ? (
+          <div className="h-60 rounded-xl bg-muted animate-pulse" />
+        ) : attendanceChart.length === 0 ? (
           <Card>
             <CardHeader>
-              <CardTitle className="text-base">Learning Goals (mock)</CardTitle>
+              <CardTitle className="text-base">Attendance Overview</CardTitle>
             </CardHeader>
-            <CardContent className="space-y-4">
-              {learningGoals.map((goal) => {
-                const pct = Math.round((goal.current / goal.target) * 100)
-                return (
-                  <div key={goal.label} className="space-y-2">
-                    <div className="flex justify-between text-sm">
-                      <span>{goal.label}</span>
-                      <span className="font-medium">
-                        {goal.current}{goal.unit}/{goal.target}{goal.unit}
-                      </span>
-                    </div>
-                    <Progress value={pct} />
-                  </div>
-                )
-              })}
+            <CardContent>
+              <p className="text-sm text-muted-foreground py-6 text-center">
+                No attendance data yet.
+              </p>
             </CardContent>
           </Card>
-        </div>
+        ) : (
+          <ChartCard title="Attendance Overview" data={attendanceChart} type="pie" dataKey="value" xKey="name" height={240} />
+        )}
       </div>
     </div>
   )

@@ -15,6 +15,7 @@ import { Label } from '@/components/ui/label'
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
 import { Switch } from '@/components/ui/switch'
 import { toast } from 'sonner'
+
 import {
   Dialog,
   DialogContent,
@@ -29,6 +30,16 @@ import { useGradebook } from '@/hooks/useGradebookData'
 import { useAnnouncementList, useCreateAnnouncement } from '@/hooks/useAnnouncementData'
 import type { ApiAssignment, ApiAnnouncement } from '@/types'
 
+
+import { useState, useEffect } from 'react'
+import { useNavigate, useParams } from 'react-router-dom'
+import api from '@/services/api'
+
+import axios from 'axios'
+import { Upload, Video, ImagePlus, FileText, X, CheckCircle2, Mail, Calendar, BookOpen, Users, Play, Briefcase, Plus, Trash2, Edit3, ArrowLeft, Eye } from 'lucide-react'
+import { Textarea } from '@/components/ui/textarea'
+
+
 const schema = z.object({
   title: z.string().trim().min(3, 'Title must be at least 3 characters'),
   description: z.string().trim().min(10, 'Description must be at least 10 characters'),
@@ -39,8 +50,96 @@ type CreateCourseValues = z.infer<typeof schema>
 
 export function CreateCoursePage() {
   const navigate = useNavigate()
+
   const { register, handleSubmit, setValue, formState: { errors } } = useForm<CreateCourseValues>({ resolver: zodResolver(schema) })
   const createCourse = useCreateCourse()
+
+  const [isSubmitting, setIsSubmitting] = useState(false)
+  const [videoFile, setVideoFile] = useState<File | null>(null)
+  const [thumbnailFile, setThumbnailFile] = useState<File | null>(null)
+  const [thumbnailPreview, setThumbnailPreview] = useState<string | null>(null)
+  const [resourceFiles, setResourceFiles] = useState<File[]>([])
+  const [uploadProgress, setUploadProgress] = useState<number | null>(null)
+  const [uploadStage, setUploadStage] = useState('')
+
+  const handleVideoChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0]
+    if (file) {
+      const MAX_VIDEO_SIZE_MB = 500
+      if (file.size > MAX_VIDEO_SIZE_MB * 1024 * 1024) {
+        toast.error(`Video file size must be under ${MAX_VIDEO_SIZE_MB} MB`)
+        e.target.value = ''
+        return
+      }
+      setVideoFile(file)
+    }
+  }
+
+  const handleThumbnailChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0]
+    if (file) {
+      const MAX_THUMBNAIL_SIZE_MB = 5
+      if (file.size > MAX_THUMBNAIL_SIZE_MB * 1024 * 1024) {
+        toast.error(`Thumbnail image size must be under ${MAX_THUMBNAIL_SIZE_MB} MB`)
+        e.target.value = ''
+        return
+      }
+      setThumbnailFile(file)
+      setThumbnailPreview(URL.createObjectURL(file))
+    }
+  }
+
+  const handleResourceChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    if (e.target.files) {
+      const selected = Array.from(e.target.files)
+      const MAX_RESOURCE_SIZE_MB = 10
+      const valid = selected.filter((file) => {
+        if (file.size > MAX_RESOURCE_SIZE_MB * 1024 * 1024) {
+          toast.error(`Resource "${file.name}" exceeds ${MAX_RESOURCE_SIZE_MB} MB limit`)
+          return false
+        }
+        return true
+      })
+      setResourceFiles((prev) => [...prev, ...valid])
+    }
+  }
+
+  const removeResource = (index: number) => {
+    setResourceFiles(prev => prev.filter((_, i) => i !== index))
+  }
+
+  const uploadToCloudinary = async (file: File, type: 'video' | 'image' | 'raw') => {
+    const { data: signRes } = await api.get(`/uploads/sign-cloudinary?type=${type}`)
+    const { signature, timestamp, folder } = signRes.data
+
+    // Use backend response first, fallback to frontend env vars
+    const cloudName = signRes.data.cloudName || import.meta.env.VITE_CLOUDINARY_CLOUD_NAME
+    const apiKey    = signRes.data.apiKey    || import.meta.env.VITE_CLOUDINARY_API_KEY
+
+    if (!cloudName || !apiKey) {
+      throw new Error('Cloudinary is not configured. Please set CLOUDINARY_CLOUD_NAME and CLOUDINARY_API_KEY.')
+    }
+
+    const formData = new FormData()
+    formData.append('file', file)
+    formData.append('api_key', apiKey)
+    formData.append('timestamp', timestamp.toString())
+    formData.append('signature', signature)
+    formData.append('folder', folder)
+
+    const uploadUrl = `https://api.cloudinary.com/v1_1/${cloudName}/${type}/upload`
+    const { data: uploadRes } = await axios.post(uploadUrl, formData, {
+      headers: { 'Content-Type': 'multipart/form-data' },
+      onUploadProgress: (progressEvent) => {
+        if (progressEvent.total) {
+          const percent = Math.round((progressEvent.loaded * 100) / progressEvent.total)
+          setUploadProgress(percent)
+        }
+      }
+    })
+    return uploadRes.secure_url
+  }
+
 
   const onSubmit = (values: CreateCourseValues) => {
     createCourse.mutate(

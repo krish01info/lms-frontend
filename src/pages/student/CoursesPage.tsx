@@ -27,7 +27,27 @@ export function CoursesPage() {
     }
   })
 
-  const courses = data || []
+  // Same queryKey as ProgressPage/ProfilePage/CourseDetailPage — shares cache
+  const { data: progressData } = useQuery({
+    queryKey: ['progress-my'],
+    queryFn: async () => {
+      const res = await api.get('/progress/my')
+      return res.data.data.progress
+    },
+  })
+
+  const progressByCourseId = useMemo(() => {
+    return new Map<string, number>(
+      (progressData || []).map((p: any) => [p.courseId, p.percentage] as [string, number])
+    )
+  }, [progressData])
+
+  const courses = useMemo(() => {
+    return (data || []).map((course: any) => ({
+      ...course,
+      progress: progressByCourseId.get(course.id) ?? 0,
+    }))
+  }, [data, progressByCourseId])
 
   const filtered = useMemo(() => {
     return courses.filter((course: any) => {
