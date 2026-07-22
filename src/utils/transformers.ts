@@ -34,3 +34,15 @@ export function transformLesson(backendLesson: any) {
     content: backendLesson.content || null,
   }
 }
+
+export function transformAssignment(raw: any) {
+  const isOverdue = new Date(raw.dueDate) < new Date()
+  return {
+    id: raw.id,
+    title: raw.title,
+    course: raw.course?.title ?? 'Unknown course',
+    dueDate: raw.dueDate,
+    status: isOverdue ? 'overdue' : 'pending',
+    // grade/maxGrade omitted — not available from this endpoint
+  }
+}
