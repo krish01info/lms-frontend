@@ -35,7 +35,7 @@ export function AssignmentCard({ assignment, onView, onSubmit }: AssignmentCardP
               <p className="text-sm text-muted-foreground">{assignment.course}</p>
               <div className="flex items-center gap-2 text-xs text-muted-foreground">
                 <Calendar className="h-3.5 w-3.5" />
-                Due {format(parseISO(assignment.dueDate), 'MMM d, yyyy')}
+                Due {assignment.dueDate ? format(parseISO(assignment.dueDate), 'MMM d, yyyy') : 'No due date'}
               </div>
             </div>
           </div>
