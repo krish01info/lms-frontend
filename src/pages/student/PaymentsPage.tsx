@@ -29,10 +29,6 @@ const paymentMethods = [
   { id: 'wallet', label: 'Wallet', icon: Wallet },
 ]
 
-// NOTE: no Fee model exists — sample amount, since there's no real "amount due" concept yet.
-// Selecting a real enrolled course still creates a real Payment record on submit.
-const SAMPLE_AMOUNT = 499
-
 export function PaymentsPage() {
   const queryClient = useQueryClient()
   const [selectedMethod, setSelectedMethod] = useState('upi')
@@ -59,11 +55,15 @@ export function PaymentsPage() {
     },
   })
 
+  const courses = courseData || []
+  const selectedCourse = courses.find((c: any) => c.id === selectedCourseId)
+  const amount = selectedCourse?.price ?? 0
+
   const payMutation = useMutation({
     mutationFn: async (courseId: string) => {
       const res = await api.post('/payments', {
         courseId,
-        amount: SAMPLE_AMOUNT,
+        amount,
         status: 'COMPLETED',
         gateway: selectedMethod,
         gatewayId: `pay_${Date.now().toString(36)}`,
@@ -76,12 +76,11 @@ export function PaymentsPage() {
     },
   })
 
-  const courses = courseData || []
   const allPayments = payments || []
   const completedPayments = allPayments.filter((p: any) => p.status === 'COMPLETED')
 
   const handlePay = () => {
-    if (!selectedCourseId) return
+    if (!selectedCourseId || amount <= 0) return
     payMutation.mutate(selectedCourseId)
   }
 
@@ -100,7 +99,7 @@ export function PaymentsPage() {
           <div className="grid gap-6 lg:grid-cols-2">
             <Card>
               <CardHeader>
-                <CardTitle className="text-base">Payment Summary (sample)</CardTitle>
+                <CardTitle className="text-base">Payment Summary</CardTitle>
               </CardHeader>
               <CardContent className="space-y-4">
                 <div className="space-y-2">
@@ -118,16 +117,18 @@ export function PaymentsPage() {
                 </div>
                 <div className="rounded-2xl bg-muted/50 p-4">
                   <p className="text-sm text-muted-foreground">Amount payable</p>
-                  <p className="text-3xl font-bold">₹{SAMPLE_AMOUNT.toLocaleString('en-IN')}</p>
-                  <p className="mt-1 text-sm text-muted-foreground">
-                    Sample fee — no fee structure exists in backend yet
-                  </p>
+                  <p className="text-3xl font-bold">₹{amount.toLocaleString('en-IN')}</p>
+                  {selectedCourse && amount === 0 && (
+                    <p className="mt-1 text-sm text-emerald-600">
+                      This course is free — no payment needed
+                    </p>
+                  )}
                 </div>
                 <Separator />
                 <div className="space-y-2 text-sm">
                   <div className="flex justify-between">
                     <span className="text-muted-foreground">Subtotal</span>
-                    <span>₹{SAMPLE_AMOUNT.toLocaleString('en-IN')}</span>
+                    <span>₹{amount.toLocaleString('en-IN')}</span>
                   </div>
                   <div className="flex justify-between">
                     <span className="text-muted-foreground">Processing fee</span>
@@ -135,7 +136,7 @@ export function PaymentsPage() {
                   </div>
                   <div className="flex justify-between font-semibold">
                     <span>Total</span>
-                    <span>₹{SAMPLE_AMOUNT.toLocaleString('en-IN')}</span>
+                    <span>₹{amount.toLocaleString('en-IN')}</span>
                   </div>
                 </div>
               </CardContent>
@@ -230,9 +231,13 @@ export function PaymentsPage() {
                     <Button
                       className="w-full h-12 text-base"
                       onClick={handlePay}
-                      disabled={payMutation.isPending || !selectedCourseId}
+                      disabled={payMutation.isPending || !selectedCourseId || amount <= 0}
                     >
-                      {payMutation.isPending ? 'Processing...' : `Pay ₹${SAMPLE_AMOUNT.toLocaleString('en-IN')}`}
+                      {payMutation.isPending
+                        ? 'Processing...'
+                        : amount > 0
+                          ? `Pay ₹${amount.toLocaleString('en-IN')}`
+                          : 'Free — Nothing to Pay'}
                     </Button>
 
                     {!selectedCourseId && (

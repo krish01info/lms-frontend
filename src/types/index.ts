@@ -129,6 +129,7 @@ export interface Course {
   category: string
   duration: string
   status: 'active' | 'completed' | 'upcoming'
+  price?: number
 }
 
 export interface Assignment {

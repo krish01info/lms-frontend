@@ -17,6 +17,7 @@ export function transformCourse(backendCourse: any) {
     duration: backendCourse.duration || 'Self-paced',
     status: backendCourse.status === 'PUBLISHED' ? 'active' : 
             backendCourse.status === 'DRAFT' ? 'upcoming' : 'active',
+    price: Number(backendCourse.price) || 0,
   }
 }
 
