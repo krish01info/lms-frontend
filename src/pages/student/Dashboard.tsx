@@ -1,14 +1,17 @@
 import { motion } from 'framer-motion'
-import { useQuery } from '@tanstack/react-query'
+import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import {
   Award,
   BookOpen,
   Calendar,
+  CheckCircle,
   ClipboardList,
   Clock,
   GraduationCap,
   TrendingUp,
+  UserPlus,
   Users,
+  XCircle,
 } from 'lucide-react'
 import { Link } from 'react-router-dom'
 import { AssignmentCard } from '@/components/common/AssignmentCard'
@@ -19,6 +22,7 @@ import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Progress } from '@/components/ui/progress'
+import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar'
 import {
   mockAssignments,
   mockCalendarEvents,
@@ -27,6 +31,7 @@ import {
 import { useAuth } from '@/contexts/AuthContext'
 import { transformCourse } from '@/utils/transformers'
 import api from '@/services/api'
+import { toast } from 'sonner'
 
 const quickActions = [
   { label: 'My Courses', href: '/student/courses', icon: BookOpen },
@@ -52,6 +57,7 @@ const announcements = [
 
 export function StudentDashboard() {
   const { user } = useAuth()
+  const queryClient = useQueryClient()
 
   // Live enrolled courses — shares cache with CoursesPage/ProfilePage
   const { data: courseData, isLoading: isCoursesLoading } = useQuery({
@@ -80,12 +86,40 @@ export function StudentDashboard() {
     },
   })
 
+  // Pending parent link requests — poll every 30s
+  const { data: linkRequestData } = useQuery({
+    queryKey: ['student-link-requests'],
+    queryFn: async () => {
+      const res = await api.get('/users/link-requests')
+      return res.data.data.requests as Array<{
+        id: string
+        parent: { id: string; name: string; email: string; avatar?: string }
+        createdAt: string
+      }>
+    },
+    refetchInterval: 30000,
+  })
+
+  const respondMutation = useMutation({
+    mutationFn: async ({ requestId, action }: { requestId: string; action: 'accept' | 'reject' }) => {
+      await api.post(`/users/link-requests/${requestId}/respond`, { action })
+      return action
+    },
+    onSuccess: (action) => {
+      queryClient.invalidateQueries({ queryKey: ['student-link-requests'] })
+      toast.success(action === 'accept' ? 'Parent linked to your account!' : 'Request rejected.')
+    },
+    onError: (err: any) => {
+      toast.error(err.response?.data?.message || 'Failed to respond to request.')
+    },
+  })
+
+  const pendingRequests = linkRequestData || []
   const courses = courseData || []
   const progress = progressData || []
   const isLoading = isCoursesLoading || isProgressLoading || isAttendanceLoading
   const attendancePercentage = attendanceData?.overallPercentage ?? 0
 
-  // NOTE: assignments blocked — teammate's /assignments endpoint returns 404, still mock for now
   const todayClasses = mockCalendarEvents.filter((e) => e.type === 'class').slice(0, 3)
   const dueAssignments = mockAssignments.filter((a) => a.status === 'pending' || a.status === 'overdue')
 
@@ -95,6 +129,52 @@ export function StudentDashboard() {
         title={`Welcome back, ${user?.name?.split(' ')[0]}! 👋`}
         description="Here's what's happening with your learning today."
       />
+
+      {/* ── Parent Link Request Approval Banner ─────────────────────────────── */}
+      {pendingRequests.length > 0 && (
+        <div className="space-y-3">
+          {pendingRequests.map((req) => (
+            <motion.div
+              key={req.id}
+              initial={{ opacity: 0, y: -10 }}
+              animate={{ opacity: 1, y: 0 }}
+              className="flex flex-col sm:flex-row items-start sm:items-center gap-4 rounded-2xl border border-amber-500/30 bg-amber-500/5 p-4"
+            >
+              <div className="flex items-center gap-3 flex-1 min-w-0">
+                <div className="h-10 w-10 rounded-xl bg-amber-500/10 flex items-center justify-center shrink-0">
+                  <UserPlus className="h-5 w-5 text-amber-600" />
+                </div>
+                <div className="min-w-0">
+                  <p className="text-sm font-semibold">Parent Link Request</p>
+                  <p className="text-xs text-muted-foreground truncate">
+                    <span className="font-medium text-foreground">{req.parent.name}</span>
+                    {' '}({req.parent.email}) wants to monitor your account
+                  </p>
+                </div>
+              </div>
+              <div className="flex gap-2 shrink-0">
+                <Button
+                  size="sm"
+                  variant="outline"
+                  className="border-red-500/30 text-red-600 hover:bg-red-500/10"
+                  disabled={respondMutation.isPending}
+                  onClick={() => respondMutation.mutate({ requestId: req.id, action: 'reject' })}
+                >
+                  <XCircle className="h-4 w-4 mr-1.5" /> Reject
+                </Button>
+                <Button
+                  size="sm"
+                  className="bg-emerald-600 hover:bg-emerald-700 text-white"
+                  disabled={respondMutation.isPending}
+                  onClick={() => respondMutation.mutate({ requestId: req.id, action: 'accept' })}
+                >
+                  <CheckCircle className="h-4 w-4 mr-1.5" /> Accept
+                </Button>
+              </div>
+            </motion.div>
+          ))}
+        </div>
+      )}
 
       <motion.div
         initial={{ opacity: 0, y: 20 }}

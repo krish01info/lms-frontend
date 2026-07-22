@@ -20,6 +20,7 @@ export function ParentDashboard() {
 
   // Children state
   const [children, setChildren] = useState<any[]>([])
+  const [pendingRequests, setPendingRequests] = useState<any[]>([])
   const [selectedChild, setSelectedChild] = useState<any>(null)
   const [overview, setOverview] = useState<any>(null)
   const [isLoading, setIsLoading] = useState(true)
@@ -35,14 +36,18 @@ export function ParentDashboard() {
   const fetchChildren = async () => {
     setIsLoading(true)
     try {
-      const { data } = await api.get('/parent/children')
-      const list = data.data.children || []
+      const [childrenRes, pendingRes] = await Promise.all([
+        api.get('/parent/children'),
+        api.get('/parent/pending-requests'),
+      ])
+      const list = childrenRes.data.data.children || []
       setChildren(list)
+      setPendingRequests(pendingRes.data.data.requests || [])
       if (list.length > 0 && !selectedChild) {
         setSelectedChild(list[0])
       }
     } catch (err: any) {
-      toast.error(err.response?.data?.message || 'Failed to load linked children.')
+      toast.error(err.response?.data?.message || 'Failed to load children.')
     } finally {
       setIsLoading(false)
     }
@@ -72,13 +77,15 @@ export function ParentDashboard() {
     if (!inviteCode.trim()) return
     setIsLinking(true)
     try {
-      const { data } = await api.post('/parent/children', { inviteCode: inviteCode.trim().toUpperCase() })
-      toast.success(`${data.data.child.name} linked to your account!`)
+      await api.post('/parent/children', { inviteCode: inviteCode.trim().toUpperCase() })
+      toast.success('Link request sent! Waiting for student approval.', {
+        description: 'The student will see a notification to accept or reject your request.',
+      })
       setInviteCode('')
       setShowLinkModal(false)
       await fetchChildren()
     } catch (err: any) {
-      toast.error(err.response?.data?.message || 'Failed to link child account.')
+      toast.error(err.response?.data?.message || 'Failed to send link request.')
     } finally {
       setIsLinking(false)
     }
@@ -185,10 +192,25 @@ export function ParentDashboard() {
                 </button>
               </div>
             ))}
+
+            {/* Pending request chips */}
+            {pendingRequests.map((req) => (
+              <div
+                key={req.id}
+                className="flex items-center gap-2 px-3.5 py-1.5 rounded-xl text-sm font-medium border border-amber-500/40 bg-amber-500/10 text-amber-700 cursor-default"
+                title="Waiting for student to accept"
+              >
+                <Loader2 className="h-3.5 w-3.5 animate-spin" />
+                <span>{req.child?.name || 'Student'}</span>
+                <span className="text-[10px] font-normal opacity-70">Pending</span>
+              </div>
+            ))}
+
             <Button variant="outline" size="sm" onClick={() => setShowLinkModal(true)}>
               <Plus className="h-3.5 w-3.5 mr-1" /> Add
             </Button>
           </div>
+
 
           {/* ── Overview for Selected Child ─────────────────────────────── */}
           {isLoadingOverview ? (
