@@ -24,12 +24,11 @@ import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Progress } from '@/components/ui/progress'
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar'
 import {
-  mockAssignments,
   mockCalendarEvents,
   weeklyProgressData,
 } from '@/constants/mockData'
 import { useAuth } from '@/contexts/AuthContext'
-import { transformCourse } from '@/utils/transformers'
+import { transformCourse, transformAssignment } from '@/utils/transformers'
 import api from '@/services/api'
 import { toast } from 'sonner'
 
@@ -40,19 +39,12 @@ const quickActions = [
   { label: 'Calendar', href: '/student/calendar', icon: Calendar },
 ]
 
-// NOTE: sample data — no backend model for activity log yet
+// NOTE: sample data — activity endpoint exists but response shape not yet verified
 const recentActivity = [
   { action: 'Submitted Wave Motion Lab Report', time: '2 hours ago', type: 'assignment' },
   { action: 'Completed Shakespeare Analysis Quiz', time: 'Yesterday', type: 'quiz' },
   { action: 'Joined Mathematics Discussion', time: '2 days ago', type: 'discussion' },
   { action: 'Downloaded Physics Notes', time: '3 days ago', type: 'resource' },
-]
-
-// NOTE: sample data — no backend model for announcements yet
-const announcements = [
-  { title: 'Science Fair Registration Open', date: 'Jun 25' },
-  { title: 'Mid-term Exam Schedule Released', date: 'Jun 24' },
-  { title: 'New Course: Data Science 101', date: 'Jun 23' },
 ]
 
 export function StudentDashboard() {
@@ -115,13 +107,35 @@ export function StudentDashboard() {
   })
 
   const pendingRequests = linkRequestData || []
+
+  // Live announcements — institute-wide + enrolled-course announcements
+  const { data: announcementsData, isLoading: isAnnouncementsLoading } = useQuery({
+    queryKey: ['announcements'],
+    queryFn: async () => {
+      const res = await api.get('/announcements')
+      return res.data.data.announcements
+    },
+  })
+
+  // Live assignments — enrolled-course assignments; status derived client-side
+  // from dueDate only (API doesn't return per-student submission status here)
+  const { data: assignmentsData, isLoading: isAssignmentsLoading } = useQuery({
+    queryKey: ['assignments'],
+    queryFn: async () => {
+      const res = await api.get('/assignments')
+      return res.data.data.assignments.map(transformAssignment)
+    },
+  })
+
   const courses = courseData || []
   const progress = progressData || []
+  const announcements = announcementsData || []
+  const allAssignments = assignmentsData || []
   const isLoading = isCoursesLoading || isProgressLoading || isAttendanceLoading
   const attendancePercentage = attendanceData?.overallPercentage ?? 0
 
   const todayClasses = mockCalendarEvents.filter((e) => e.type === 'class').slice(0, 3)
-  const dueAssignments = mockAssignments.filter((a) => a.status === 'pending' || a.status === 'overdue')
+  const dueAssignments = allAssignments.filter((a: any) => a.status === 'pending' || a.status === 'overdue')
 
   return (
     <div className="space-y-6">
@@ -185,7 +199,7 @@ export function StudentDashboard() {
           <p className="text-sm text-white/80">{user?.grade}</p>
           <h2 className="mt-1 text-2xl font-bold sm:text-3xl">Keep up the great work!</h2>
           <p className="mt-2 max-w-md text-white/80">
-            You have {dueAssignments.length} assignments due this week (sample) and {todayClasses.length} classes today (sample).
+            You have {dueAssignments.length} assignments due this week and {todayClasses.length} classes today (sample).
           </p>
           <div className="mt-6 flex flex-wrap gap-3">
             <Button variant="glass" asChild>
@@ -201,7 +215,7 @@ export function StudentDashboard() {
       </motion.div>
 
       <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
-        <StatCard label="Attendance" value={`${attendancePercentage}%`} icon={Users} />
+        <StatCard label="Attendance" value={`${Math.round(attendancePercentage)}%`} icon={Users} />
         <StatCard label="Current GPA" value="3.85" change="Sample data" trend="up" icon={Award} iconClassName="bg-emerald-500/10" />
         <StatCard
           label="Courses Active"
@@ -218,15 +232,30 @@ export function StudentDashboard() {
 
           <Card>
             <CardHeader className="flex flex-row items-center justify-between">
-              <CardTitle>Assignments Due (sample)</CardTitle>
+              <CardTitle>Assignments Due</CardTitle>
               <Button variant="ghost" size="sm" asChild>
                 <Link to="/student/assignments">View all</Link>
               </Button>
             </CardHeader>
             <CardContent className="space-y-4">
-              {dueAssignments.map((a) => (
-                <AssignmentCard key={a.id} assignment={a} />
-              ))}
+              {isAssignmentsLoading && (
+                <div className="space-y-3">
+                  {[1, 2].map((i) => (
+                    <div key={i} className="h-20 rounded-2xl bg-muted animate-pulse" />
+                  ))}
+                </div>
+              )}
+
+              {!isAssignmentsLoading && dueAssignments.length === 0 && (
+                <p className="text-sm text-muted-foreground py-2 text-center">
+                  No assignments due right now.
+                </p>
+              )}
+
+              {!isAssignmentsLoading &&
+                dueAssignments.map((a: any) => (
+                  <AssignmentCard key={a.id} assignment={a} />
+                ))}
             </CardContent>
           </Card>
         </div>
@@ -304,18 +333,35 @@ export function StudentDashboard() {
       <div className="grid gap-6 lg:grid-cols-2">
         <Card>
           <CardHeader>
-            <CardTitle className="text-base">Announcements (sample)</CardTitle>
+            <CardTitle className="text-base">Announcements</CardTitle>
           </CardHeader>
           <CardContent className="space-y-3">
-            {announcements.map((item, i) => (
-              <div key={i} className="flex items-start justify-between rounded-2xl border border-border p-4">
-                <div>
-                  <p className="text-sm font-medium">{item.title}</p>
-                  <p className="text-xs text-muted-foreground">{item.date}</p>
-                </div>
-                <Badge variant="secondary">New</Badge>
+            {isAnnouncementsLoading && (
+              <div className="space-y-3">
+                {[1, 2, 3].map((i) => (
+                  <div key={i} className="h-16 rounded-2xl bg-muted animate-pulse" />
+                ))}
               </div>
-            ))}
+            )}
+
+            {!isAnnouncementsLoading && announcements.length === 0 && (
+              <p className="text-sm text-muted-foreground py-2 text-center">
+                No announcements yet.
+              </p>
+            )}
+
+            {!isAnnouncementsLoading &&
+              announcements.map((item: any) => (
+                <div key={item.id} className="flex items-start justify-between rounded-2xl border border-border p-4">
+                  <div>
+                    <p className="text-sm font-medium">{item.title}</p>
+                    <p className="text-xs text-muted-foreground">
+                      {new Date(item.createdAt).toLocaleDateString('en-US', { month: 'short', day: 'numeric' })}
+                    </p>
+                  </div>
+                  <Badge variant="secondary">New</Badge>
+                </div>
+              ))}
           </CardContent>
         </Card>
 

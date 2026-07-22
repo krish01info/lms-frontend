@@ -1,5 +1,5 @@
 import { format, parseISO } from 'date-fns'
-import { Calendar, FileText } from 'lucide-react'
+import { Calendar, FileText, Download } from 'lucide-react'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent } from '@/components/ui/card'
@@ -16,9 +16,10 @@ const statusConfig = {
 interface AssignmentCardProps {
   assignment: Assignment
   onView?: () => void
+  onSubmit?: () => void
 }
 
-export function AssignmentCard({ assignment, onView }: AssignmentCardProps) {
+export function AssignmentCard({ assignment, onView, onSubmit }: AssignmentCardProps) {
   const status = statusConfig[assignment.status]
 
   return (
@@ -40,19 +41,52 @@ export function AssignmentCard({ assignment, onView }: AssignmentCardProps) {
           </div>
           <Badge variant={status.variant}>{status.label}</Badge>
         </div>
-        {assignment.grade !== undefined && (
-          <div className="mt-4 flex items-center gap-2">
-            <span className="text-sm text-muted-foreground">Grade:</span>
-            <span className={cn('text-lg font-bold', assignment.grade >= 80 ? 'text-emerald-600' : 'text-amber-600')}>
-              {assignment.grade}/{assignment.maxGrade}
-            </span>
+
+        {assignment.status === 'graded' && assignment.grade !== null && (
+          <div className="mt-4 space-y-1">
+            <div className="flex items-center gap-2">
+              <span className="text-sm text-muted-foreground">Grade:</span>
+              <span className={cn('text-lg font-bold', assignment.grade >= 80 ? 'text-emerald-600' : 'text-amber-600')}>
+                {assignment.grade}{assignment.maxGrade ? `/${assignment.maxGrade}` : ''}
+              </span>
+            </div>
+            {assignment.feedback && (
+              <p className="text-sm text-muted-foreground italic">"{assignment.feedback}"</p>
+            )}
           </div>
         )}
-        {onView && (
-          <Button variant="outline" size="sm" className="mt-4" onClick={onView}>
-            View Details
-          </Button>
+
+        {assignment.status === 'submitted' && (
+          <div className="mt-4 flex items-center justify-between text-sm text-muted-foreground">
+            <span>
+              Submitted {assignment.submittedAt ? format(parseISO(assignment.submittedAt), 'MMM d, yyyy') : ''} — awaiting grade
+            </span>
+            {assignment.submissionFileUrl && (
+              
+                <a href={assignment.submissionFileUrl}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="flex items-center gap-1 text-primary hover:underline"
+              >
+                <Download className="h-3.5 w-3.5" />
+                View file
+              </a>
+            )}
+          </div>
         )}
+
+        <div className="mt-4 flex gap-2">
+          {(assignment.status === 'pending' || assignment.status === 'overdue') && onSubmit && (
+            <Button size="sm" onClick={onSubmit}>
+              Submit Assignment
+            </Button>
+          )}
+          {onView && (
+            <Button variant="outline" size="sm" onClick={onView}>
+              View Details
+            </Button>
+          )}
+        </div>
       </CardContent>
     </Card>
   )

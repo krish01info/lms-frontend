@@ -34,3 +34,25 @@ export function transformLesson(backendLesson: any) {
     content: backendLesson.content || null,
   }
 }
+
+// Transforms backend assignment shape → frontend Assignment shape
+// status/mySubmission now come directly from GET /assignments — no more
+// client-side pending/overdue guessing based on dueDate.
+export function transformAssignment(raw: any) {
+  const submission = raw.mySubmission
+
+  return {
+    id: raw.id,
+    title: raw.title,
+    description: raw.description || '',
+    course: raw.course?.title ?? 'Unknown course',
+    courseId: raw.courseId,
+    dueDate: raw.dueDate,
+    status: raw.status, // 'pending' | 'submitted' | 'graded' | 'overdue'
+    submissionCount: raw.submissionCount ?? 0,
+    grade: submission?.grade ?? null,
+    feedback: submission?.feedback ?? null,
+    submissionFileUrl: submission?.fileUrl ?? null,
+    submittedAt: submission?.createdAt ?? null,
+  }
+}
