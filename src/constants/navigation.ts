@@ -96,11 +96,19 @@ const adminNav: NavConfig[] = [
   { label: 'Audit Logs', href: '/admin/audit-logs', icon: ScrollText },
 ]
 
+const superAdminNav: NavConfig[] = [
+  { label: 'Dashboard', href: '/super-admin', icon: LayoutDashboard },
+  { label: 'Organization', href: '/super-admin/organization', icon: Shield },
+  { label: 'Branches', href: '/super-admin/branches', icon: FolderOpen },
+  { label: 'Branch Admins', href: '/super-admin/admins', icon: Users },
+]
+
 export const navigationByRole: Record<UserRole, NavConfig[]> = {
   student: studentNav,
   teacher: teacherNav,
   parent: parentNav,
   admin: adminNav,
+  'super-admin': superAdminNav,
 }
 
 export const roleDashboardPaths: Record<UserRole, string> = {
@@ -108,6 +116,7 @@ export const roleDashboardPaths: Record<UserRole, string> = {
   teacher: '/teacher',
   parent: '/parent',
   admin: '/admin',
+  'super-admin': '/super-admin',
 }
 
 export const roleLabels: Record<UserRole, string> = {
@@ -115,6 +124,8 @@ export const roleLabels: Record<UserRole, string> = {
   teacher: 'Teacher',
   parent: 'Parent',
   admin: 'Administrator',
+  'super-admin': 'Super Admin',
 }
+
 
 export const APP_NAME = 'LearnFlow'

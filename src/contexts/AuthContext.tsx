@@ -11,6 +11,7 @@ interface AuthContextType {
   register: (name: string, email: string, password: string, role: UserRole) => Promise<void>
   logout: () => void
   switchRole: (role: UserRole) => void
+  updateUser: (partialUser: Partial<User>) => void
 }
 
 const AuthContext = createContext<AuthContextType | undefined>(undefined)
@@ -34,6 +35,15 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     }
     setIsLoading(false)
   }, [])
+
+  const updateUser = (partialUser: Partial<User>) => {
+    setUser((prev) => {
+      if (!prev) return null
+      const updated = { ...prev, ...partialUser }
+      localStorage.setItem(AUTH_KEY, JSON.stringify(updated))
+      return updated
+    })
+  }
 
   const login = async (email: string, password: string, role: UserRole = 'student') => {
     try {
@@ -86,12 +96,14 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         register,
         logout,
         switchRole,
+        updateUser,
       }}
     >
       {children}
     </AuthContext.Provider>
   )
 }
+
 
 export function useAuth() {
   const context = useContext(AuthContext)
