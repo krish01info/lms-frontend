@@ -63,7 +63,7 @@ export function AssignmentCard({ assignment, onView, onSubmit }: AssignmentCardP
             </span>
             {assignment.submissionFileUrl && (
               
-                href={assignment.submissionFileUrl}
+                <a href={assignment.submissionFileUrl}
                 target="_blank"
                 rel="noopener noreferrer"
                 className="flex items-center gap-1 text-primary hover:underline"
