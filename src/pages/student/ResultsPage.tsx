@@ -23,16 +23,16 @@ const gradeBreakdown = [
   { grade: 'B+', count: 1, color: 'bg-blue-500' },
 ]
 
-const { data: progressData } = useQuery({
+export function ResultsPage() {
+  const { user } = useAuth()
+  
+  const { data: progressData } = useQuery({
   queryKey: ['progress-my'],
   queryFn: async () => {
     const res = await api.get('/progress/my')
     return res.data.data.progress
   },
 })
-
-export function ResultsPage() {
-  const { user } = useAuth()
   const gpa = progressData?.length ? Number(((progressData.reduce((s: number, c: any) => s + c.percentage, 0) / progressData.length) / 25).toFixed(2)) : 3.85
   const totalStudents = 156  
   const classRank = 12
