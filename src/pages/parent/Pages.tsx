@@ -1,9 +1,11 @@
-export { ProgressPage as ParentPerformancePage } from '@/pages/student/ProgressPage'
-export { AttendancePage as ParentAttendancePage } from '@/pages/student/AttendancePage'
-export { AssignmentsPage as ParentAssignmentsPage } from '@/pages/student/AssignmentsPage'
-export { PaymentsPage as ParentPaymentsPage } from '@/pages/student/PaymentsPage'
+// ─── Proper parent-specific pages (call /parent/* endpoints, not student ones)
+export { ParentPerformancePage } from './ChildViewPages'
+export { ParentAttendancePage } from './ChildViewPages'
+export { ParentAssignmentsPage } from './ChildViewPages'
+export { ParentProgressPage } from './ChildViewPages'
+
+// ─── Role-agnostic pages (safe to share — use /messages, /notifications, /users/me)
 export { MessagesPage as ParentMessagesPage } from '@/pages/student/MessagesPage'
-export { ProgressPage as ParentProgressPage } from '@/pages/student/ProgressPage'
 export { NotificationsPage as ParentNotificationsPage } from '@/pages/student/NotificationsPage'
 export { CalendarPage as ParentCalendarPage } from '@/pages/student/CalendarPage'
 export { ProfilePage as ParentProfilePage } from '@/pages/student/ProfilePage'
@@ -29,3 +31,6 @@ export function ReportsPage() {
     </PageShell>
   )
 }
+
+// Fee payments page — parent-safe, uses /payments endpoint
+export { PaymentsPage as ParentPaymentsPage } from '@/pages/student/PaymentsPage'
