@@ -22,10 +22,7 @@ import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Progress } from '@/components/ui/progress'
-import {
-  mockCalendarEvents,
-  weeklyProgressData,
-} from '@/constants/mockData'
+import { mockCalendarEvents } from '@/constants/mockData'
 import { useAuth } from '@/contexts/AuthContext'
 import { transformCourse, transformAssignment } from '@/utils/transformers'
 import api from '@/services/api'
@@ -38,13 +35,21 @@ const quickActions = [
   { label: 'Calendar', href: '/student/calendar', icon: Calendar },
 ]
 
-// NOTE: sample data — activity endpoint exists but response shape not yet verified
-const recentActivity = [
-  { action: 'Submitted Wave Motion Lab Report', time: '2 hours ago', type: 'assignment' },
-  { action: 'Completed Shakespeare Analysis Quiz', time: 'Yesterday', type: 'quiz' },
-  { action: 'Joined Mathematics Discussion', time: '2 days ago', type: 'discussion' },
-  { action: 'Downloaded Physics Notes', time: '3 days ago', type: 'resource' },
-]
+// Converts an ISO timestamp into a relative "time ago" string for the activity feed.
+function timeAgo(dateString: string): string {
+  const now = new Date().getTime()
+  const then = new Date(dateString).getTime()
+  const diffMs = now - then
+  const diffMins = Math.floor(diffMs / 60000)
+
+  if (diffMins < 1) return 'Just now'
+  if (diffMins < 60) return `${diffMins} min${diffMins === 1 ? '' : 's'} ago`
+  const diffHours = Math.floor(diffMins / 60)
+  if (diffHours < 24) return `${diffHours} hour${diffHours === 1 ? '' : 's'} ago`
+  const diffDays = Math.floor(diffHours / 24)
+  if (diffDays === 1) return 'Yesterday'
+  return `${diffDays} days ago`
+}
 
 export function StudentDashboard() {
   const { user } = useAuth()
@@ -65,6 +70,30 @@ export function StudentDashboard() {
     queryFn: async () => {
       const res = await api.get('/progress/my')
       return res.data.data.progress
+    },
+  })
+
+  // Live weekly study hours — powers both the chart and the Learning Hours stat card
+  const { data: weeklyHoursData, isLoading: isWeeklyHoursLoading } = useQuery({
+    queryKey: ['progress-weekly-hours'],
+    queryFn: async () => {
+      const res = await api.get('/progress/my/weekly-hours')
+      return res.data.data.weeklyHours as Array<{ name: string; hours: number }>
+    },
+  })
+
+  // Live recent activity — synthesized backend feed from lessons/quizzes/assignments
+  const { data: activityData, isLoading: isActivityLoading } = useQuery({
+    queryKey: ['activity-my'],
+    queryFn: async () => {
+      const res = await api.get('/activity/my')
+      return res.data.data.activity as Array<{
+        id: string
+        type: string
+        action: string
+        courseId: string
+        timestamp: string
+      }>
     },
   })
 
@@ -130,8 +159,13 @@ export function StudentDashboard() {
   const progress = progressData || []
   const announcements = announcementsData || []
   const allAssignments = assignmentsData || []
+  const weeklyHours = weeklyHoursData || []
+  const recentActivity = activityData || []
   const isLoading = isCoursesLoading || isProgressLoading || isAttendanceLoading
   const attendancePercentage = attendanceData?.overallPercentage ?? 0
+
+  // Sum this week's hours for the stat card from the same weekly-hours response
+  const totalWeeklyHours = weeklyHours.reduce((sum, day) => sum + day.hours, 0)
 
   const todayClasses = mockCalendarEvents.filter((e) => e.type === 'class').slice(0, 3)
   const dueAssignments = allAssignments.filter((a: any) => a.status === 'pending' || a.status === 'overdue')
@@ -222,12 +256,18 @@ export function StudentDashboard() {
           icon={BookOpen}
           iconClassName="bg-secondary/10"
         />
-        <StatCard label="Learning Hours" value="24.5h" change="This week (sample)" trend="neutral" icon={Clock} />
+        <StatCard
+          label="Learning Hours"
+          value={isWeeklyHoursLoading ? '—' : `${totalWeeklyHours.toFixed(1)}h`}
+          change="This week"
+          trend="neutral"
+          icon={Clock}
+        />
       </div>
 
       <div className="grid gap-6 lg:grid-cols-3">
         <div className="lg:col-span-2 space-y-6">
-          <ChartCard title="Weekly Learning Progress (sample)" data={weeklyProgressData} dataKey="hours" type="area" />
+          <ChartCard title="Weekly Learning Progress" data={weeklyHours} dataKey="hours" type="area" />
 
           <Card>
             <CardHeader className="flex flex-row items-center justify-between">
@@ -366,20 +406,35 @@ export function StudentDashboard() {
 
         <Card>
           <CardHeader>
-            <CardTitle className="text-base">Recent Activity (sample)</CardTitle>
+            <CardTitle className="text-base">Recent Activity</CardTitle>
           </CardHeader>
           <CardContent className="space-y-3">
-            {recentActivity.map((item, i) => (
-              <div key={i} className="flex items-center gap-3">
-                <div className="flex h-8 w-8 items-center justify-center rounded-xl bg-primary/10">
-                  <TrendingUp className="h-4 w-4 text-primary" />
-                </div>
-                <div className="flex-1">
-                  <p className="text-sm">{item.action}</p>
-                  <p className="text-xs text-muted-foreground">{item.time}</p>
-                </div>
+            {isActivityLoading && (
+              <div className="space-y-3">
+                {[1, 2, 3].map((i) => (
+                  <div key={i} className="h-10 rounded-lg bg-muted animate-pulse" />
+                ))}
               </div>
-            ))}
+            )}
+
+            {!isActivityLoading && recentActivity.length === 0 && (
+              <p className="text-sm text-muted-foreground py-2 text-center">
+                No recent activity yet.
+              </p>
+            )}
+
+            {!isActivityLoading &&
+              recentActivity.map((item) => (
+                <div key={item.id} className="flex items-center gap-3">
+                  <div className="flex h-8 w-8 items-center justify-center rounded-xl bg-primary/10">
+                    <TrendingUp className="h-4 w-4 text-primary" />
+                  </div>
+                  <div className="flex-1">
+                    <p className="text-sm">{item.action}</p>
+                    <p className="text-xs text-muted-foreground">{timeAgo(item.timestamp)}</p>
+                  </div>
+                </div>
+              ))}
           </CardContent>
         </Card>
       </div>
