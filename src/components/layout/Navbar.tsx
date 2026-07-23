@@ -15,16 +15,15 @@ import { useAuth } from '@/contexts/AuthContext'
 import { useTheme } from '@/contexts/ThemeContext'
 import { roleLabels } from '@/constants/navigation'
 import { SearchBar } from '@/components/common/SearchBar'
-import { useNotifications } from '@/hooks/useNotifications'
 
 interface NavbarProps {
   onMenuClick: () => void
+  notificationCount?: number
 }
 
-export function Navbar({ onMenuClick }: NavbarProps) {
+export function Navbar({ onMenuClick, notificationCount = 5 }: NavbarProps) {
   const { user, logout } = useAuth()
   const { theme, toggleTheme } = useTheme()
-  const { unreadCount } = useNotifications()
 
   return (
     <header className="sticky top-0 z-30 flex h-16 items-center gap-4 border-b border-border bg-card/80 px-4 backdrop-blur-xl lg:px-6">
@@ -44,9 +43,9 @@ export function Navbar({ onMenuClick }: NavbarProps) {
         <Button variant="ghost" size="icon" className="relative" asChild>
           <Link to={`/${user?.role}/notifications`}>
             <Bell className="h-5 w-5" />
-            {unreadCount > 0 && (
+            {notificationCount > 0 && (
               <Badge className="absolute -right-1 -top-1 h-5 min-w-5 justify-center px-1 text-[10px]">
-                {unreadCount}
+                {notificationCount}
               </Badge>
             )}
           </Link>

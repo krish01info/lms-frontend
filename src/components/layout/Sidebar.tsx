@@ -20,7 +20,7 @@ function NavLinks({ navItems, onClose }: { navItems: NavConfig[]; onClose?: () =
         <NavLink
           key={item.href}
           to={item.href}
-          end={item.href.split('/').length <= 2}
+          end={(item.href ?? '').split('/').length <= 2}
           onClick={onClose}
           className={({ isActive }) =>
             cn(

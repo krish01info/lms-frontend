@@ -1,7 +1,8 @@
-import { useParams } from 'react-router-dom'
+import { useParams, Link } from 'react-router-dom'
 import { motion } from 'framer-motion'
-import { useQuery } from '@tanstack/react-query'
-import { BookOpen, Download, FileText, MessageSquare, Play, Star, Users } from 'lucide-react'
+import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
+import { BookOpen, CheckCircle2, Clock, Download, FileText, HelpCircle, Loader2, MessageSquare, PenTool, Play, Star, Trophy, Users } from 'lucide-react'
+import { toast } from 'sonner'
 import { Breadcrumbs } from '@/components/common/Breadcrumbs'
 import { EmptyState } from '@/components/common/EmptyState'
 import { Badge } from '@/components/ui/badge'
@@ -10,11 +11,15 @@ import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Progress } from '@/components/ui/progress'
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
 import { mockAssignments } from '@/constants/mockData'
+import { useQuizList } from '@/hooks/useQuizData'
+import { useMyAttempt } from '@/hooks/useQuizData'
+import type { ApiQuiz } from '@/types'
 import api from '@/services/api'
 import { transformCourse, transformLesson } from '@/utils/transformers'
 
 export function CourseDetailPage() {
   const { id } = useParams()
+  const queryClient = useQueryClient()
 
   const {
     data: course,
@@ -37,6 +42,55 @@ export function CourseDetailPage() {
     },
     enabled: !!id,
   })
+
+  // Per-lesson progress for this course
+  const { data: lessonProgress } = useQuery({
+    queryKey: ['progress-course', id],
+    queryFn: async () => {
+      const res = await api.get(`/progress/${id}`)
+      return res.data.data.lessons
+    },
+    enabled: !!id,
+  })
+
+  // Same queryKey as ProgressPage/ProfilePage — shares cache
+  const { data: progressData, isLoading: progressLoading } = useQuery({
+    queryKey: ['progress-my'],
+    queryFn: async () => {
+      const res = await api.get('/progress/my')
+      return res.data.data.progress
+    },
+  })
+
+  // Mutation to mark a lesson as complete
+  const completeMutation = useMutation({
+    mutationFn: async (lessonId: string) => {
+      const res = await api.patch(`/progress/${lessonId}`, { completed: true })
+      return res.data.data.progress
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['progress-course', id] })
+      queryClient.invalidateQueries({ queryKey: ['progress-my'] })
+      queryClient.invalidateQueries({ queryKey: ['attendance-my'] })
+      toast.success('Lesson marked as complete!')
+    },
+    onError: () => {
+      toast.error('Could not mark lesson as complete. Please try again.')
+    },
+  })
+
+  // Build a map of lessonId -> completed status from the per-lesson progress
+  const completedMap = new Map<string, boolean>()
+  if (lessonProgress) {
+    lessonProgress.forEach((lp: any) => {
+      completedMap.set(lp.id, lp.completed)
+    })
+  }
+
+  const courseProgress = progressData?.find((p: any) => p.courseId === id)
+  const progressPercentage = courseProgress?.percentage ?? 0
+  const completedLessons = courseProgress?.completedLessons
+  const totalLessons = courseProgress?.totalLessons
 
   if (courseLoading) {
     return (
@@ -85,6 +139,7 @@ export function CourseDetailPage() {
               <TabsTrigger value="modules">Lessons</TabsTrigger>
               <TabsTrigger value="resources">Resources</TabsTrigger>
               <TabsTrigger value="assignments">Assignments</TabsTrigger>
+              <TabsTrigger value="quizzes">Quizzes</TabsTrigger>
               <TabsTrigger value="discussion">Discussion</TabsTrigger>
             </TabsList>
 
@@ -106,23 +161,48 @@ export function CourseDetailPage() {
               )}
 
               {!lessonsLoading &&
-                lessons?.map((lesson: any) => (
-                  <Card key={lesson.id} className="hover:shadow-md transition-shadow">
-                    <CardContent className="flex items-center gap-4 p-4">
-                      <div className="flex h-12 w-12 items-center justify-center rounded-2xl bg-primary/10">
-                        <Play className="h-5 w-5 text-primary" />
-                      </div>
-                      <div className="flex-1">
-                        <p className="font-medium">{lesson.title}</p>
-                        <p className="text-sm text-muted-foreground">
-                          {lesson.description || `Lesson ${lesson.order}`}
-                          {lesson.duration ? ` · ${lesson.duration} min` : ''}
-                        </p>
-                      </div>
-                      {lesson.isPreview && <Badge variant="secondary">Preview</Badge>}
-                    </CardContent>
-                  </Card>
-                ))}
+                lessons?.map((lesson: any) => {
+                  const isCompleted = completedMap.get(lesson.id) ?? false
+                  return (
+                    <Card key={lesson.id} className="hover:shadow-md transition-shadow">
+                      <CardContent className="flex items-center gap-4 p-4">
+                        <div className={`flex h-12 w-12 items-center justify-center rounded-2xl ${isCompleted ? 'bg-emerald-500/10' : 'bg-primary/10'}`}>
+                          {isCompleted ? (
+                            <CheckCircle2 className="h-5 w-5 text-emerald-600" />
+                          ) : (
+                            <Play className="h-5 w-5 text-primary" />
+                          )}
+                        </div>
+                        <div className="flex-1">
+                          <p className="font-medium">{lesson.title}</p>
+                          <p className="text-sm text-muted-foreground">
+                            {lesson.description || `Lesson ${lesson.order}`}
+                            {lesson.duration ? ` · ${Math.floor(lesson.duration / 60)}:${String(lesson.duration % 60).padStart(2, '0')}` : ''}
+                          </p>
+                        </div>
+                        <div className="flex items-center gap-2">
+                          {lesson.isPreview && <Badge variant="secondary">Preview</Badge>}
+                          <Button
+                            variant={isCompleted ? 'outline' : 'default'}
+                            size="sm"
+                            onClick={() => completeMutation.mutate(lesson.id)}
+                            disabled={completeMutation.isPending}
+                            className={isCompleted ? 'border-emerald-200 text-emerald-700 hover:bg-emerald-50' : ''}
+                          >
+                            {completeMutation.isPending ? (
+                              <Loader2 className="mr-1.5 h-3.5 w-3.5 animate-spin" />
+                            ) : isCompleted ? (
+                              <CheckCircle2 className="mr-1.5 h-3.5 w-3.5" />
+                            ) : (
+                              <CheckCircle2 className="mr-1.5 h-3.5 w-3.5" />
+                            )}
+                            {isCompleted ? 'Completed' : 'Mark Complete'}
+                          </Button>
+                        </div>
+                      </CardContent>
+                    </Card>
+                  )
+                })}
             </TabsContent>
 
             <TabsContent value="resources" className="space-y-3">
@@ -153,6 +233,10 @@ export function CourseDetailPage() {
               ))}
             </TabsContent>
 
+            <TabsContent value="quizzes" className="space-y-3">
+              <CourseQuizzesTab courseId={id!} />
+            </TabsContent>
+
             <TabsContent value="discussion" className="space-y-3">
               {['Question about integration by parts', 'Help with problem 15', 'Study group for midterm'].map((topic) => (
                 <Card key={topic} className="cursor-pointer hover:shadow-md transition-shadow">
@@ -180,11 +264,22 @@ export function CourseDetailPage() {
           <Card>
             <CardHeader><CardTitle className="text-base">Your Progress</CardTitle></CardHeader>
             <CardContent className="space-y-4">
-              <div className="text-center">
-                <p className="text-4xl font-bold text-primary">{course.progress}%</p>
-                <p className="text-sm text-muted-foreground">Complete</p>
-              </div>
-              <Progress value={course.progress} className="h-3" />
+              {progressLoading ? (
+                <div className="h-24 rounded-xl bg-muted animate-pulse" />
+              ) : (
+                <>
+                  <div className="text-center">
+                    <p className="text-4xl font-bold text-primary">{progressPercentage}%</p>
+                    <p className="text-sm text-muted-foreground">Complete</p>
+                    {completedLessons !== undefined && totalLessons !== undefined && (
+                      <p className="text-xs text-muted-foreground mt-1">
+                        {completedLessons} of {totalLessons} lessons completed
+                      </p>
+                    )}
+                  </div>
+                  <Progress value={progressPercentage} className="h-3" />
+                </>
+              )}
               <Button className="w-full"><BookOpen className="mr-2 h-4 w-4" />Continue Learning</Button>
             </CardContent>
           </Card>
@@ -196,5 +291,97 @@ export function CourseDetailPage() {
         </div>
       </div>
     </div>
+  )
+}
+
+function CourseQuizzesTab({ courseId }: { courseId: string }) {
+  const { data, isLoading } = useQuizList(courseId)
+  const quizzes = data?.quizzes ?? []
+
+  if (isLoading) {
+    return (
+      <div className="space-y-3">
+        {[1, 2].map((i) => (
+          <div key={i} className="h-24 rounded-xl bg-muted animate-pulse" />
+        ))}
+      </div>
+    )
+  }
+
+  if (!quizzes.length) {
+    return (
+      <EmptyState
+        icon={PenTool}
+        title="No quizzes yet"
+        description="This course doesn't have any active quizzes yet."
+      />
+    )
+  }
+
+  return (
+    <div className="grid gap-3 sm:grid-cols-2">
+      {quizzes.map((quiz, i) => (
+        <CourseQuizCard key={quiz.id} quiz={quiz} index={i} />
+      ))}
+    </div>
+  )
+}
+
+function CourseQuizCard({ quiz, index }: { quiz: ApiQuiz; index: number }) {
+  const { data: attempt } = useMyAttempt(quiz.id)
+  const isCompleted = !!attempt
+
+  return (
+    <motion.div
+      initial={{ opacity: 0, y: 20 }}
+      animate={{ opacity: 1, y: 0 }}
+      transition={{ delay: index * 0.05 }}
+    >
+      <Card className="h-full hover:shadow-md transition-shadow">
+        <CardContent className="p-4">
+          <div className="flex items-start justify-between gap-3">
+            <div className="flex items-center gap-3">
+              <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-primary/10">
+                {isCompleted ? (
+                  <Trophy className="h-5 w-5 text-emerald-600" />
+                ) : (
+                  <PenTool className="h-5 w-5 text-primary" />
+                )}
+              </div>
+              <div>
+                <p className="font-medium text-sm">{quiz.title}</p>
+                <div className="flex items-center gap-2 mt-0.5 text-xs text-muted-foreground">
+                  <span className="flex items-center gap-1">
+                    <HelpCircle className="h-3 w-3" />
+                    {quiz.questionCount} Qs
+                  </span>
+                  {quiz.timeLimit && (
+                    <span className="flex items-center gap-1">
+                      <Clock className="h-3 w-3" />
+                      {quiz.timeLimit}min
+                    </span>
+                  )}
+                </div>
+              </div>
+            </div>
+            <Badge variant={isCompleted ? 'secondary' : 'default'}>
+              {isCompleted ? 'Done' : 'Open'}
+            </Badge>
+          </div>
+
+          <div className="mt-4">
+            {isCompleted ? (
+              <Button variant="outline" size="sm" className="w-full" asChild>
+                <Link to={`/student/quizzes/${quiz.id}/results`}>View Results</Link>
+              </Button>
+            ) : (
+              <Button size="sm" className="w-full" asChild>
+                <Link to={`/student/quizzes/take/${quiz.id}`}>Start Quiz</Link>
+              </Button>
+            )}
+          </div>
+        </CardContent>
+      </Card>
+    </motion.div>
   )
 }

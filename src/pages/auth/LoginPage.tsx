@@ -17,7 +17,7 @@ import { toast } from 'sonner'
 const loginSchema = z.object({
   email: z.string().email('Please enter a valid email'),
   password: z.string().min(6, 'Password must be at least 6 characters'),
-  role: z.enum(['student', 'teacher', 'parent', 'admin']),
+  role: z.enum(['student', 'teacher', 'parent', 'admin', 'super-admin']),
 })
 
 type LoginForm = z.infer<typeof loginSchema>

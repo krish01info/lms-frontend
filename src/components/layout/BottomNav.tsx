@@ -28,6 +28,12 @@ const bottomNavItems: Record<UserRole, { label: string; href: string; icon: type
     { label: 'Analytics', href: '/admin/analytics', icon: MessageSquare },
     { label: 'Profile', href: '/admin/settings', icon: User },
   ],
+  'super-admin': [
+    { label: 'Home', href: '/super-admin', icon: LayoutDashboard },
+    { label: 'Branches', href: '/super-admin/branches', icon: BookOpen },
+    { label: 'Admins', href: '/super-admin/branch-admins', icon: User },
+    { label: 'Profile', href: '/super-admin/settings', icon: User },
+  ],
 }
 
 interface BottomNavProps {
@@ -44,7 +50,7 @@ export function BottomNav({ role }: BottomNavProps) {
           <NavLink
             key={item.href}
             to={item.href}
-            end={item.href.split('/').length <= 2}
+            end={(item.href ?? '').split('/').length <= 2}
             className={({ isActive }) =>
               cn(
                 'flex flex-col items-center gap-1 rounded-2xl px-4 py-2 text-xs transition-colors',

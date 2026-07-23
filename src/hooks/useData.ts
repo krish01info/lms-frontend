@@ -5,6 +5,7 @@ import {
   mockCalendarEvents,
   mockConversations,
   mockCourses,
+  mockNotifications,
   mockPayments,
   mockQuizzes,
 } from '@/constants/mockData'
@@ -57,6 +58,16 @@ export function useCalendarEvents() {
     queryFn: async () => {
       await delay()
       return mockCalendarEvents
+    },
+  })
+}
+
+export function useNotifications() {
+  return useQuery({
+    queryKey: ['notifications'],
+    queryFn: async () => {
+      await delay()
+      return mockNotifications
     },
   })
 }

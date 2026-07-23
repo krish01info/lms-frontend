@@ -8,9 +8,10 @@ interface EmptyStateProps {
   description: string
   actionLabel?: string
   onAction?: () => void
+  action?: React.ReactNode
 }
 
-export function EmptyState({ icon: Icon, title, description, actionLabel, onAction }: EmptyStateProps) {
+export function EmptyState({ icon: Icon, title, description, actionLabel, onAction, action }: EmptyStateProps) {
   return (
     <motion.div
       initial={{ opacity: 0, scale: 0.95 }}
@@ -22,7 +23,7 @@ export function EmptyState({ icon: Icon, title, description, actionLabel, onActi
       </div>
       <h3 className="mb-2 text-xl font-semibold">{title}</h3>
       <p className="mb-6 max-w-sm text-muted-foreground">{description}</p>
-      {actionLabel && onAction && (
+      {action ? action : actionLabel && onAction && (
         <Button onClick={onAction}>{actionLabel}</Button>
       )}
     </motion.div>

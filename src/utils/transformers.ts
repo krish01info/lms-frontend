@@ -17,6 +17,7 @@ export function transformCourse(backendCourse: any) {
     duration: backendCourse.duration || 'Self-paced',
     status: backendCourse.status === 'PUBLISHED' ? 'active' : 
             backendCourse.status === 'DRAFT' ? 'upcoming' : 'active',
+    price: Number(backendCourse.price) || 0,
   }
 }
 
@@ -32,5 +33,67 @@ export function transformLesson(backendLesson: any) {
     isPreview: backendLesson.isPreview ?? false,
     videoUrl: backendLesson.videoUrl || null,
     content: backendLesson.content || null,
+  }
+}
+
+// Transforms backend assignment shape → frontend Assignment shape
+// status/mySubmission now come directly from GET /assignments — no more
+// client-side pending/overdue guessing based on dueDate.
+export function transformAssignment(raw: any) {
+  const submission = raw.mySubmission
+
+  return {
+    id: raw.id,
+    title: raw.title,
+    description: raw.description || '',
+    course: raw.course?.title ?? 'Unknown course',
+    courseId: raw.courseId,
+    dueDate: raw.dueDate,
+    status: raw.status, // 'pending' | 'submitted' | 'graded' | 'overdue'
+    submissionCount: raw.submissionCount ?? 0,
+    grade: submission?.grade ?? null,
+    feedback: submission?.feedback ?? null,
+    submissionFileUrl: submission?.fileUrl ?? null,
+    submittedAt: submission?.createdAt ?? null,
+  }
+}
+
+import type { Resource, ResourceType, ApiResource } from '@/types'
+
+function formatFileSize(bytes: number): string {
+  if (bytes < 1024) return `${bytes} B`
+  if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(1)} KB`
+  return `${(bytes / (1024 * 1024)).toFixed(1)} MB`
+}
+
+function categorizeFileType(mimeType: string): ResourceType {
+  if (mimeType === 'application/pdf') return 'pdf'
+  if (mimeType.startsWith('video/')) return 'video'
+  if (mimeType.startsWith('image/')) return 'image'
+  if (
+    mimeType.includes('word') ||
+    mimeType.includes('document') ||
+    mimeType === 'text/plain' ||
+    mimeType.includes('presentation') ||
+    mimeType.includes('sheet')
+  ) {
+    return 'doc'
+  }
+  return 'other'
+}
+
+export function transformResource(raw: ApiResource, courseTitle: string): Resource {
+  return {
+    id: raw.id,
+    title: raw.title,
+    course: courseTitle,
+    courseId: raw.courseId,
+    fileUrl: raw.fileUrl,
+    fileType: raw.fileType,
+    type: categorizeFileType(raw.fileType || ''),
+    size: formatFileSize(raw.fileSize || 0),
+    sizeBytes: raw.fileSize || 0,
+    uploadedBy: raw.uploadedBy?.name ?? 'Unknown',
+    createdAt: raw.createdAt,
   }
 }

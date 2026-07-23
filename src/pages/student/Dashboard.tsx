@@ -1,14 +1,17 @@
 import { motion } from 'framer-motion'
-import { useQuery } from '@tanstack/react-query'
+import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import {
   Award,
   BookOpen,
   Calendar,
+  CheckCircle,
   ClipboardList,
   Clock,
   GraduationCap,
   TrendingUp,
+  UserPlus,
   Users,
+  XCircle,
 } from 'lucide-react'
 import { Link } from 'react-router-dom'
 import { AssignmentCard } from '@/components/common/AssignmentCard'
@@ -19,14 +22,11 @@ import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Progress } from '@/components/ui/progress'
-import {
-  mockAssignments,
-  mockCalendarEvents,
-  weeklyProgressData,
-} from '@/constants/mockData'
+import { mockCalendarEvents } from '@/constants/mockData'
 import { useAuth } from '@/contexts/AuthContext'
-import { transformCourse } from '@/utils/transformers'
+import { transformCourse, transformAssignment } from '@/utils/transformers'
 import api from '@/services/api'
+import { toast } from 'sonner'
 
 const quickActions = [
   { label: 'My Courses', href: '/student/courses', icon: BookOpen },
@@ -35,23 +35,25 @@ const quickActions = [
   { label: 'Calendar', href: '/student/calendar', icon: Calendar },
 ]
 
-// NOTE: sample data — no backend model for activity log yet
-const recentActivity = [
-  { action: 'Submitted Wave Motion Lab Report', time: '2 hours ago', type: 'assignment' },
-  { action: 'Completed Shakespeare Analysis Quiz', time: 'Yesterday', type: 'quiz' },
-  { action: 'Joined Mathematics Discussion', time: '2 days ago', type: 'discussion' },
-  { action: 'Downloaded Physics Notes', time: '3 days ago', type: 'resource' },
-]
+// Converts an ISO timestamp into a relative "time ago" string for the activity feed.
+function timeAgo(dateString: string): string {
+  const now = new Date().getTime()
+  const then = new Date(dateString).getTime()
+  const diffMs = now - then
+  const diffMins = Math.floor(diffMs / 60000)
 
-// NOTE: sample data — no backend model for announcements yet
-const announcements = [
-  { title: 'Science Fair Registration Open', date: 'Jun 25' },
-  { title: 'Mid-term Exam Schedule Released', date: 'Jun 24' },
-  { title: 'New Course: Data Science 101', date: 'Jun 23' },
-]
+  if (diffMins < 1) return 'Just now'
+  if (diffMins < 60) return `${diffMins} min${diffMins === 1 ? '' : 's'} ago`
+  const diffHours = Math.floor(diffMins / 60)
+  if (diffHours < 24) return `${diffHours} hour${diffHours === 1 ? '' : 's'} ago`
+  const diffDays = Math.floor(diffHours / 24)
+  if (diffDays === 1) return 'Yesterday'
+  return `${diffDays} days ago`
+}
 
 export function StudentDashboard() {
   const { user } = useAuth()
+  const queryClient = useQueryClient()
 
   // Live enrolled courses — shares cache with CoursesPage/ProfilePage
   const { data: courseData, isLoading: isCoursesLoading } = useQuery({
@@ -71,13 +73,102 @@ export function StudentDashboard() {
     },
   })
 
+  // Live weekly study hours — powers both the chart and the Learning Hours stat card
+  const { data: weeklyHoursData, isLoading: isWeeklyHoursLoading } = useQuery({
+    queryKey: ['progress-weekly-hours'],
+    queryFn: async () => {
+      const res = await api.get('/progress/my/weekly-hours')
+      return res.data.data.weeklyHours as Array<{ name: string; hours: number }>
+    },
+  })
+
+  // Live recent activity — synthesized backend feed from lessons/quizzes/assignments
+  const { data: activityData, isLoading: isActivityLoading } = useQuery({
+    queryKey: ['activity-my'],
+    queryFn: async () => {
+      const res = await api.get('/activity/my')
+      return res.data.data.activity as Array<{
+        id: string
+        type: string
+        action: string
+        courseId: string
+        timestamp: string
+      }>
+    },
+  })
+
+  // Live attendance — shares cache with AttendancePage/ProfilePage/ProgressPage
+  const { data: attendanceData, isLoading: isAttendanceLoading } = useQuery({
+    queryKey: ['attendance-my'],
+    queryFn: async () => {
+      const res = await api.get('/attendance/my')
+      return res.data.data
+    },
+  })
+
+  // Pending parent link requests — poll every 30s
+  const { data: linkRequestData } = useQuery({
+    queryKey: ['student-link-requests'],
+    queryFn: async () => {
+      const res = await api.get('/users/link-requests')
+      return res.data.data.requests as Array<{
+        id: string
+        parent: { id: string; name: string; email: string; avatar?: string }
+        createdAt: string
+      }>
+    },
+    refetchInterval: 30000,
+  })
+
+  const respondMutation = useMutation({
+    mutationFn: async ({ requestId, action }: { requestId: string; action: 'accept' | 'reject' }) => {
+      await api.post(`/users/link-requests/${requestId}/respond`, { action })
+      return action
+    },
+    onSuccess: (action) => {
+      queryClient.invalidateQueries({ queryKey: ['student-link-requests'] })
+      toast.success(action === 'accept' ? 'Parent linked to your account!' : 'Request rejected.')
+    },
+    onError: (err: any) => {
+      toast.error(err.response?.data?.message || 'Failed to respond to request.')
+    },
+  })
+
+  const pendingRequests = linkRequestData || []
+
+  // Live announcements — institute-wide + enrolled-course announcements
+  const { data: announcementsData, isLoading: isAnnouncementsLoading } = useQuery({
+    queryKey: ['announcements'],
+    queryFn: async () => {
+      const res = await api.get('/announcements')
+      return res.data.data.announcements
+    },
+  })
+
+  // Live assignments — enrolled-course assignments; status derived client-side
+  // from dueDate only (API doesn't return per-student submission status here)
+  const { data: assignmentsData, isLoading: isAssignmentsLoading } = useQuery({
+    queryKey: ['assignments'],
+    queryFn: async () => {
+      const res = await api.get('/assignments')
+      return res.data.data.assignments.map(transformAssignment)
+    },
+  })
+
   const courses = courseData || []
   const progress = progressData || []
-  const isLoading = isCoursesLoading || isProgressLoading
+  const announcements = announcementsData || []
+  const allAssignments = assignmentsData || []
+  const weeklyHours = weeklyHoursData || []
+  const recentActivity = activityData || []
+  const isLoading = isCoursesLoading || isProgressLoading || isAttendanceLoading
+  const attendancePercentage = attendanceData?.overallPercentage ?? 0
 
-  // NOTE: assignments blocked — teammate's /assignments endpoint returns 404, still mock for now
+  // Sum this week's hours for the stat card from the same weekly-hours response
+  const totalWeeklyHours = weeklyHours.reduce((sum, day) => sum + day.hours, 0)
+
   const todayClasses = mockCalendarEvents.filter((e) => e.type === 'class').slice(0, 3)
-  const dueAssignments = mockAssignments.filter((a) => a.status === 'pending' || a.status === 'overdue')
+  const dueAssignments = allAssignments.filter((a: any) => a.status === 'pending' || a.status === 'overdue')
 
   return (
     <div className="space-y-6">
@@ -85,6 +176,52 @@ export function StudentDashboard() {
         title={`Welcome back, ${user?.name?.split(' ')[0]}! 👋`}
         description="Here's what's happening with your learning today."
       />
+
+      {/* ── Parent Link Request Approval Banner ─────────────────────────────── */}
+      {pendingRequests.length > 0 && (
+        <div className="space-y-3">
+          {pendingRequests.map((req) => (
+            <motion.div
+              key={req.id}
+              initial={{ opacity: 0, y: -10 }}
+              animate={{ opacity: 1, y: 0 }}
+              className="flex flex-col sm:flex-row items-start sm:items-center gap-4 rounded-2xl border border-amber-500/30 bg-amber-500/5 p-4"
+            >
+              <div className="flex items-center gap-3 flex-1 min-w-0">
+                <div className="h-10 w-10 rounded-xl bg-amber-500/10 flex items-center justify-center shrink-0">
+                  <UserPlus className="h-5 w-5 text-amber-600" />
+                </div>
+                <div className="min-w-0">
+                  <p className="text-sm font-semibold">Parent Link Request</p>
+                  <p className="text-xs text-muted-foreground truncate">
+                    <span className="font-medium text-foreground">{req.parent.name}</span>
+                    {' '}({req.parent.email}) wants to monitor your account
+                  </p>
+                </div>
+              </div>
+              <div className="flex gap-2 shrink-0">
+                <Button
+                  size="sm"
+                  variant="outline"
+                  className="border-red-500/30 text-red-600 hover:bg-red-500/10"
+                  disabled={respondMutation.isPending}
+                  onClick={() => respondMutation.mutate({ requestId: req.id, action: 'reject' })}
+                >
+                  <XCircle className="h-4 w-4 mr-1.5" /> Reject
+                </Button>
+                <Button
+                  size="sm"
+                  className="bg-emerald-600 hover:bg-emerald-700 text-white"
+                  disabled={respondMutation.isPending}
+                  onClick={() => respondMutation.mutate({ requestId: req.id, action: 'accept' })}
+                >
+                  <CheckCircle className="h-4 w-4 mr-1.5" /> Accept
+                </Button>
+              </div>
+            </motion.div>
+          ))}
+        </div>
+      )}
 
       <motion.div
         initial={{ opacity: 0, y: 20 }}
@@ -95,7 +232,7 @@ export function StudentDashboard() {
           <p className="text-sm text-white/80">{user?.grade}</p>
           <h2 className="mt-1 text-2xl font-bold sm:text-3xl">Keep up the great work!</h2>
           <p className="mt-2 max-w-md text-white/80">
-            You have {dueAssignments.length} assignments due this week (sample) and {todayClasses.length} classes today (sample).
+            You have {dueAssignments.length} assignments due this week and {todayClasses.length} classes today (sample).
           </p>
           <div className="mt-6 flex flex-wrap gap-3">
             <Button variant="glass" asChild>
@@ -111,32 +248,60 @@ export function StudentDashboard() {
       </motion.div>
 
       <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
-        <StatCard label="Attendance" value="92%" change="Sample data" trend="up" icon={Users} />
-        <StatCard label="Current GPA" value="3.85" change="Sample data" trend="up" icon={Award} iconClassName="bg-emerald-500/10" />
+        <StatCard label="Attendance" value={`${Math.round(attendancePercentage)}%`} icon={Users} />
+        <StatCard
+          label="Avg Progress"
+          value={progress.length ? `${Math.round(progress.reduce((s: number, c: any) => s + c.percentage, 0) / progress.length)}%` : '—'}
+          change="Across all courses"
+          trend="up"
+          icon={Award}
+          iconClassName="bg-emerald-500/10"
+        />
         <StatCard
           label="Courses Active"
           value={isCoursesLoading ? '—' : courses.length}
           icon={BookOpen}
           iconClassName="bg-secondary/10"
         />
-        <StatCard label="Learning Hours" value="24.5h" change="This week (sample)" trend="neutral" icon={Clock} />
+        <StatCard
+          label="Learning Hours"
+          value={isWeeklyHoursLoading ? '—' : `${totalWeeklyHours.toFixed(1)}h`}
+          change="This week"
+          trend="neutral"
+          icon={Clock}
+        />
       </div>
 
       <div className="grid gap-6 lg:grid-cols-3">
         <div className="lg:col-span-2 space-y-6">
-          <ChartCard title="Weekly Learning Progress (sample)" data={weeklyProgressData} dataKey="hours" type="area" />
+          <ChartCard title="Weekly Learning Progress" data={weeklyHours} dataKey="hours" type="area" />
 
           <Card>
             <CardHeader className="flex flex-row items-center justify-between">
-              <CardTitle>Assignments Due (sample)</CardTitle>
+              <CardTitle>Assignments Due</CardTitle>
               <Button variant="ghost" size="sm" asChild>
                 <Link to="/student/assignments">View all</Link>
               </Button>
             </CardHeader>
             <CardContent className="space-y-4">
-              {dueAssignments.map((a) => (
-                <AssignmentCard key={a.id} assignment={a} />
-              ))}
+              {isAssignmentsLoading && (
+                <div className="space-y-3">
+                  {[1, 2].map((i) => (
+                    <div key={i} className="h-20 rounded-2xl bg-muted animate-pulse" />
+                  ))}
+                </div>
+              )}
+
+              {!isAssignmentsLoading && dueAssignments.length === 0 && (
+                <p className="text-sm text-muted-foreground py-2 text-center">
+                  No assignments due right now.
+                </p>
+              )}
+
+              {!isAssignmentsLoading &&
+                dueAssignments.map((a: any) => (
+                  <AssignmentCard key={a.id} assignment={a} />
+                ))}
             </CardContent>
           </Card>
         </div>
@@ -214,37 +379,69 @@ export function StudentDashboard() {
       <div className="grid gap-6 lg:grid-cols-2">
         <Card>
           <CardHeader>
-            <CardTitle className="text-base">Announcements (sample)</CardTitle>
+            <CardTitle className="text-base">Announcements</CardTitle>
           </CardHeader>
           <CardContent className="space-y-3">
-            {announcements.map((item, i) => (
-              <div key={i} className="flex items-start justify-between rounded-2xl border border-border p-4">
-                <div>
-                  <p className="text-sm font-medium">{item.title}</p>
-                  <p className="text-xs text-muted-foreground">{item.date}</p>
-                </div>
-                <Badge variant="secondary">New</Badge>
+            {isAnnouncementsLoading && (
+              <div className="space-y-3">
+                {[1, 2, 3].map((i) => (
+                  <div key={i} className="h-16 rounded-2xl bg-muted animate-pulse" />
+                ))}
               </div>
-            ))}
+            )}
+
+            {!isAnnouncementsLoading && announcements.length === 0 && (
+              <p className="text-sm text-muted-foreground py-2 text-center">
+                No announcements yet.
+              </p>
+            )}
+
+            {!isAnnouncementsLoading &&
+              announcements.map((item: any) => (
+                <div key={item.id} className="flex items-start justify-between rounded-2xl border border-border p-4">
+                  <div>
+                    <p className="text-sm font-medium">{item.title}</p>
+                    <p className="text-xs text-muted-foreground">
+                      {new Date(item.createdAt).toLocaleDateString('en-US', { month: 'short', day: 'numeric' })}
+                    </p>
+                  </div>
+                  <Badge variant="secondary">New</Badge>
+                </div>
+              ))}
           </CardContent>
         </Card>
 
         <Card>
           <CardHeader>
-            <CardTitle className="text-base">Recent Activity (sample)</CardTitle>
+            <CardTitle className="text-base">Recent Activity</CardTitle>
           </CardHeader>
           <CardContent className="space-y-3">
-            {recentActivity.map((item, i) => (
-              <div key={i} className="flex items-center gap-3">
-                <div className="flex h-8 w-8 items-center justify-center rounded-xl bg-primary/10">
-                  <TrendingUp className="h-4 w-4 text-primary" />
-                </div>
-                <div className="flex-1">
-                  <p className="text-sm">{item.action}</p>
-                  <p className="text-xs text-muted-foreground">{item.time}</p>
-                </div>
+            {isActivityLoading && (
+              <div className="space-y-3">
+                {[1, 2, 3].map((i) => (
+                  <div key={i} className="h-10 rounded-lg bg-muted animate-pulse" />
+                ))}
               </div>
-            ))}
+            )}
+
+            {!isActivityLoading && recentActivity.length === 0 && (
+              <p className="text-sm text-muted-foreground py-2 text-center">
+                No recent activity yet.
+              </p>
+            )}
+
+            {!isActivityLoading &&
+              recentActivity.map((item) => (
+                <div key={item.id} className="flex items-center gap-3">
+                  <div className="flex h-8 w-8 items-center justify-center rounded-xl bg-primary/10">
+                    <TrendingUp className="h-4 w-4 text-primary" />
+                  </div>
+                  <div className="flex-1">
+                    <p className="text-sm">{item.action}</p>
+                    <p className="text-xs text-muted-foreground">{timeAgo(item.timestamp)}</p>
+                  </div>
+                </div>
+              ))}
           </CardContent>
         </Card>
       </div>

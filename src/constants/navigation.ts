@@ -9,8 +9,8 @@ import {
   MessageSquare,
   Settings,
   Users,
-  BarChart3,
   Award,
+  BarChart3,
   Bell,
   Bot,
   FolderOpen,
@@ -58,6 +58,7 @@ const teacherNav: NavConfig[] = [
   { label: 'Dashboard', href: '/teacher', icon: LayoutDashboard },
   { label: 'Create Course', href: '/teacher/create-course', icon: BookOpen },
   { label: 'Manage Courses', href: '/teacher/courses', icon: FolderOpen },
+  { label: 'Enrollments', href: '/teacher/enrollments', icon: GraduationCap },
   { label: 'Assignments', href: '/teacher/assignments', icon: ClipboardList },
   { label: 'Quiz Builder', href: '/teacher/quiz-builder', icon: PenTool },
   { label: 'Attendance', href: '/teacher/attendance', icon: ClipboardCheck },
@@ -65,7 +66,6 @@ const teacherNav: NavConfig[] = [
   { label: 'Announcements', href: '/teacher/announcements', icon: Bell },
   { label: 'Student Performance', href: '/teacher/performance', icon: TrendingUp },
   { label: 'Messages', href: '/teacher/messages', icon: MessageSquare, badge: 4 },
-  { label: 'Analytics', href: '/teacher/analytics', icon: BarChart3 },
   { label: 'Resources', href: '/teacher/resources', icon: FolderOpen },
   { label: 'Profile', href: '/teacher/profile', icon: User },
 ]
@@ -96,11 +96,19 @@ const adminNav: NavConfig[] = [
   { label: 'Audit Logs', href: '/admin/audit-logs', icon: ScrollText },
 ]
 
+const superAdminNav: NavConfig[] = [
+  { label: 'Dashboard', href: '/super-admin', icon: LayoutDashboard },
+  { label: 'Organization', href: '/super-admin/organization', icon: Shield },
+  { label: 'Branches', href: '/super-admin/branches', icon: FolderOpen },
+  { label: 'Branch Admins', href: '/super-admin/admins', icon: Users },
+]
+
 export const navigationByRole: Record<UserRole, NavConfig[]> = {
   student: studentNav,
   teacher: teacherNav,
   parent: parentNav,
   admin: adminNav,
+  'super-admin': superAdminNav,
 }
 
 export const roleDashboardPaths: Record<UserRole, string> = {
@@ -108,6 +116,7 @@ export const roleDashboardPaths: Record<UserRole, string> = {
   teacher: '/teacher',
   parent: '/parent',
   admin: '/admin',
+  'super-admin': '/super-admin',
 }
 
 export const roleLabels: Record<UserRole, string> = {
@@ -115,6 +124,8 @@ export const roleLabels: Record<UserRole, string> = {
   teacher: 'Teacher',
   parent: 'Parent',
   admin: 'Administrator',
+  'super-admin': 'Super Admin',
 }
+
 
 export const APP_NAME = 'LearnFlow'
