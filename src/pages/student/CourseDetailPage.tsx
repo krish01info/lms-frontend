@@ -43,10 +43,9 @@ export function CourseDetailPage() {
     enabled: !!id,
   })
 
-  // Per-lesson completion status for THIS course — separate from the
-  // per-course rollup used elsewhere (ProgressPage/ProfilePage/Dashboard)
-  const { data: courseProgressDetail } = useQuery({
-    queryKey: ['course-progress-detail', id],
+  // Per-lesson progress for this course
+  const { data: lessonProgress } = useQuery({
+    queryKey: ['progress-course', id],
     queryFn: async () => {
       const res = await api.get(`/progress/${id}`)
       return res.data.data.lessons
@@ -61,16 +60,6 @@ export function CourseDetailPage() {
       const res = await api.get('/progress/my')
       return res.data.data.progress
     },
-  })
-
-  // Per-lesson progress for this course (includes completed/watchedTime)
-  const { data: lessonProgress, isLoading: lessonProgressLoading } = useQuery({
-    queryKey: ['progress-course', id],
-    queryFn: async () => {
-      const res = await api.get(`/progress/${id}`)
-      return res.data.data.lessons
-    },
-    enabled: !!id,
   })
 
   // Mutation to mark a lesson as complete

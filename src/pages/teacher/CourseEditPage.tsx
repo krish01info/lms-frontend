@@ -124,7 +124,7 @@ export function CourseEditPage() {
     reset: resetCourse,
     setValue,
     watch,
-    formState: { errors: courseErrors, isDirty },
+    formState: { errors: courseErrors },
   } = useForm<EditCourseValues>({ resolver: zodResolver(courseSchema) })
 
   useEffect(() => {

@@ -1,22 +1,13 @@
-import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
+import { useEffect, useMemo, useState } from 'react'
 import { motion } from 'framer-motion'
-import { ClipboardList, Loader2, Upload, X, CheckCircle2 } from 'lucide-react'
+import { ClipboardList, Loader2 } from 'lucide-react'
 import { AssignmentCard } from '@/components/common/AssignmentCard'
 import { SubmitAssignmentModal } from '@/components/common/SubmitAssignmentModal'
 import { EmptyState } from '@/components/common/EmptyState'
 import { PageHeader } from '@/components/common/PageHeader'
 import { SearchBar } from '@/components/common/SearchBar'
 import { Badge } from '@/components/ui/badge'
-import { Button } from '@/components/ui/button'
 import { Tabs, TabsList, TabsTrigger } from '@/components/ui/tabs'
-import {
-  Dialog,
-  DialogContent,
-  DialogHeader,
-  DialogTitle,
-  DialogDescription,
-} from '@/components/ui/dialog'
-import { toast } from 'sonner'
 import { transformAssignment } from '@/utils/transformers'
 import api from '@/services/api'
 import type { Assignment } from '@/types'
@@ -53,24 +44,6 @@ export function AssignmentsPage() {
       setIsLoading(false)
     }
   }
-
-  // Submission dialog state
-  const [submitDialogOpen, setSubmitDialogOpen] = useState(false)
-  const [submittingAssignment, setSubmittingAssignment] = useState<Assignment | null>(null)
-  const [submitFile, setSubmitFile] = useState<File | null>(null)
-  const [isSubmitting, setIsSubmitting] = useState(false)
-  const fileInputRef = useRef<HTMLInputElement>(null)
-
-  // Refresh without showing the loading spinner (useful after submit)
-  const refreshAssignments = useCallback(async () => {
-    try {
-      const res = await api.get('/assignments')
-      const raw = res.data?.data?.assignments ?? []
-      setAssignments(raw.map(transformAssignment))
-    } catch {
-      // Silently handle — the next full load will surface any errors
-    }
-  }, [])
 
   useEffect(() => {
     fetchAssignments()

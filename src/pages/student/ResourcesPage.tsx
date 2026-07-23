@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from 'react'
+import { useMemo, useState } from 'react'
 import { motion } from 'framer-motion'
 import { useQuery } from '@tanstack/react-query'
 import { Download, File, FileImage, FileText, FileVideo, FolderOpen, Loader2 } from 'lucide-react'
