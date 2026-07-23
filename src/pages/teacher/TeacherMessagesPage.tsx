@@ -293,12 +293,17 @@ export function TeacherMessagesPage() {
                           {formatTimestamp(conv.lastMessageAt)}
                         </span>
                       </div>
-                      <div className="flex items-center justify-between gap-2">
+                      <div className="flex items-center gap-2">
+                        {conv.course && (
+                          <span className="truncate text-[10px] font-medium text-primary/70">
+                            {conv.course.title}
+                          </span>
+                        )}
                         <p className="truncate text-xs text-muted-foreground">
                           {conv.lastMessage ?? 'No messages yet'}
                         </p>
                         {conv.unreadCount > 0 && (
-                          <Badge className="h-5 min-w-5 shrink-0 justify-center px-1.5 text-[10px]">
+                          <Badge className="ml-auto h-5 min-w-5 shrink-0 justify-center px-1.5 text-[10px]">
                             {conv.unreadCount}
                           </Badge>
                         )}
@@ -328,7 +333,9 @@ export function TeacherMessagesPage() {
                 </Avatar>
                 <div>
                   <p className="text-sm font-medium">{activeConv.participant.name}</p>
-                  <p className="text-xs text-muted-foreground">Online</p>
+                  <p className="text-xs text-muted-foreground">
+                    {activeConv.course ? activeConv.course.title : 'Student'}
+                  </p>
                 </div>
               </div>
               <div className="flex items-center gap-1">

@@ -1,5 +1,6 @@
-import { useEffect, useMemo, useState } from 'react'
+import { useMemo, useState } from 'react'
 import { motion } from 'framer-motion'
+import { useQuery } from '@tanstack/react-query'
 import { Download, File, FileImage, FileText, FileVideo, FolderOpen, Loader2 } from 'lucide-react'
 import { EmptyState } from '@/components/common/EmptyState'
 import { PageHeader } from '@/components/common/PageHeader'
@@ -8,10 +9,27 @@ import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent } from '@/components/ui/card'
 import { Tabs, TabsList, TabsTrigger } from '@/components/ui/tabs'
-import { transformResource } from '@/utils/transformers'
-import api from '@/services/api'
 import { cn } from '@/utils/cn'
-import type { Resource, ResourceType } from '@/types'
+import api from '@/services/api'
+import type { ApiResource } from '@/types'
+
+// ─── Helpers ───────────────────────────────────────────────────────────────
+
+type ResourceType = 'pdf' | 'doc' | 'video' | 'image' | 'other'
+
+function inferType(mimeType: string): ResourceType {
+  if (mimeType.includes('pdf')) return 'pdf'
+  if (mimeType.includes('word') || mimeType.includes('document')) return 'doc'
+  if (mimeType.includes('video') || mimeType.includes('mp4') || mimeType.includes('webm')) return 'video'
+  if (mimeType.includes('image') || mimeType.includes('png') || mimeType.includes('jpg') || mimeType.includes('jpeg') || mimeType.includes('webp')) return 'image'
+  return 'other'
+}
+
+function formatSize(bytes: number): string {
+  if (bytes < 1024) return `${bytes} B`
+  if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(1)} KB`
+  return `${(bytes / (1024 * 1024)).toFixed(1)} MB`
+}
 
 const typeIcons: Record<ResourceType, typeof FileText> = {
   pdf: FileText,
@@ -29,72 +47,109 @@ const typeColors: Record<ResourceType, string> = {
   other: 'bg-muted text-muted-foreground',
 }
 
+const typeTabs: { value: 'all' | ResourceType; label: string }[] = [
+  { value: 'all', label: 'All' },
+  { value: 'pdf', label: 'PDF' },
+  { value: 'doc', label: 'Docs' },
+  { value: 'video', label: 'Video' },
+  { value: 'image', label: 'Images' },
+]
+
+// ─── Fetch enrolled courses — same pattern as CoursesPage ──────────────────
+
+function useEnrolledCourses() {
+  return useQuery({
+    queryKey: ['enrolled-courses'],
+    queryFn: async () => {
+      const res = await api.get('/courses/enrolled')
+      return res.data.data.courses as Array<{ id: string; title: string }>
+    },
+  })
+}
+
+// ─── Flatten resources across all enrolled courses ─────────────────────────
+
+interface FlattenedResource {
+  id: string
+  title: string
+  courseId: string
+  courseTitle: string
+  fileUrl: string
+  fileType: string
+  type: ResourceType
+  size: string
+  sizeBytes: number
+  downloads: number
+  updatedAt: string
+}
+
+function useResources() {
+  const coursesQuery = useEnrolledCourses()
+  const courseIds = coursesQuery.data ?? []
+
+  return useQuery({
+    queryKey: ['resources-all', courseIds.map((c) => c.id)],
+    queryFn: async () => {
+      const results = await Promise.all(
+        courseIds.map(async (course) => {
+          try {
+            const res = await api.get(`/courses/${course.id}/resources`)
+            const resources = res.data.data.resources as ApiResource[]
+            return resources.map((r) => ({
+              id: r.id,
+              title: r.title,
+              courseId: r.courseId,
+              courseTitle: course.title,
+              fileUrl: r.fileUrl,
+              fileType: r.fileType,
+              type: inferType(r.fileType),
+              size: formatSize(r.fileSize),
+              sizeBytes: r.fileSize,
+              downloads: 0, // backend doesn't track downloads yet
+              updatedAt: r.createdAt,
+            })) as FlattenedResource[]
+          } catch {
+            return [] as FlattenedResource[]
+          }
+        })
+      )
+      // Flatten and sort by newest first
+      return results.flat().sort((a, b) => new Date(b.updatedAt).getTime() - new Date(a.updatedAt).getTime())
+    },
+    enabled: courseIds.length > 0,
+  })
+}
+
+// ─── Page ──────────────────────────────────────────────────────────────────
+
 export function ResourcesPage() {
   const [search, setSearch] = useState('')
-  const [typeFilter, setTypeFilter] = useState('all')
-  const [resources, setResources] = useState<Resource[]>([])
-  const [courseCount, setCourseCount] = useState(0)
-  const [isLoading, setIsLoading] = useState(true)
-  const [error, setError] = useState<string | null>(null)
+  const [typeFilter, setTypeFilter] = useState<'all' | ResourceType>('all')
 
-  useEffect(() => {
-    let cancelled = false
-
-    async function fetchResources() {
-      setIsLoading(true)
-      setError(null)
-      try {
-        const coursesRes = await api.get('/courses/enrolled')
-        const courses = coursesRes.data?.data?.courses ?? []
-
-        const perCourseResults = await Promise.all(
-          courses.map(async (course: any) => {
-            try {
-              const res = await api.get(`/courses/${course.id}/resources`)
-              const raw = res.data?.data?.resources ?? []
-              return raw.map((r: any) => transformResource(r, course.title))
-            } catch {
-              // If one course's resources fail to load, don't fail the whole page
-              return []
-            }
-          })
-        )
-
-        if (!cancelled) {
-          setResources(perCourseResults.flat())
-          setCourseCount(courses.length)
-        }
-      } catch (err: any) {
-        if (!cancelled) {
-          setError(err?.response?.data?.message || 'Failed to load resources')
-        }
-      } finally {
-        if (!cancelled) setIsLoading(false)
-      }
-    }
-
-    fetchResources()
-    return () => {
-      cancelled = true
-    }
-  }, [])
+  const resourcesQuery = useResources()
+  const resources = resourcesQuery.data ?? []
 
   const filtered = useMemo(() => {
     return resources.filter((r) => {
       const matchesSearch =
         r.title.toLowerCase().includes(search.toLowerCase()) ||
-        r.course.toLowerCase().includes(search.toLowerCase())
+        r.courseTitle.toLowerCase().includes(search.toLowerCase())
       const matchesType = typeFilter === 'all' || r.type === typeFilter
       return matchesSearch && matchesType
     })
-  }, [search, typeFilter, resources])
+  }, [resources, search, typeFilter])
+
+  const isLoading = resourcesQuery.isLoading
+  const isError = resourcesQuery.isError
+  const isEmpty = !isLoading && !isError && resources.length === 0
+  const noResults = !isLoading && !isError && filtered.length === 0 && resources.length > 0
 
   return (
     <div className="space-y-6">
       <PageHeader title="Resources" description="Download study materials and course resources">
         <Badge variant="secondary" className="gap-1">
           <FolderOpen className="h-3.5 w-3.5" />
-          {resources.length} files
+          {isLoading ? '...' : `${resources.length} files`}
         </Badge>
       </PageHeader>
 
@@ -105,31 +160,56 @@ export function ResourcesPage() {
           onChange={setSearch}
           className="sm:max-w-sm"
         />
-        <Tabs value={typeFilter} onValueChange={setTypeFilter}>
+        <Tabs value={typeFilter} onValueChange={(v) => setTypeFilter(v as 'all' | ResourceType)}>
           <TabsList>
-            <TabsTrigger value="all">All</TabsTrigger>
-            <TabsTrigger value="pdf">PDF</TabsTrigger>
-            <TabsTrigger value="doc">Docs</TabsTrigger>
-            <TabsTrigger value="video">Video</TabsTrigger>
-            <TabsTrigger value="image">Images</TabsTrigger>
+            {typeTabs.map((tab) => (
+              <TabsTrigger key={tab.value} value={tab.value}>
+                {tab.label}
+              </TabsTrigger>
+            ))}
           </TabsList>
         </Tabs>
       </div>
 
-      {isLoading ? (
+      {/* Loading state */}
+      {isLoading && (
         <div className="flex items-center justify-center py-16 text-muted-foreground">
           <Loader2 className="mr-2 h-5 w-5 animate-spin" />
           Loading resources...
         </div>
-      ) : error ? (
-        <EmptyState icon={FolderOpen} title="Couldn't load resources" description={error} />
-      ) : filtered.length === 0 ? (
+      )}
+
+      {/* Error state */}
+      {isError && (
+        <EmptyState
+          icon={FolderOpen}
+          title="Could not load resources"
+          description="Something went wrong. Please try again."
+          actionLabel="Retry"
+          onAction={() => resourcesQuery.refetch()}
+        />
+      )}
+
+      {/* Empty — no courses enrolled */}
+      {isEmpty && (
+        <EmptyState
+          icon={FolderOpen}
+          title="No resources available"
+          description="You don't have any enrolled courses with resources yet."
+        />
+      )}
+
+      {/* No results for current filters */}
+      {noResults && (
         <EmptyState
           icon={FolderOpen}
           title="No resources found"
           description="Try a different search term or filter."
         />
-      ) : (
+      )}
+
+      {/* Resource grid */}
+      {!isLoading && !isError && filtered.length > 0 && (
         <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
           {filtered.map((resource, i) => {
             const Icon = typeIcons[resource.type]
@@ -149,17 +229,21 @@ export function ResourcesPage() {
                       <div className="min-w-0 flex-1">
                         <h3 className="font-semibold line-clamp-2">{resource.title}</h3>
                         <p className="mt-1 text-sm text-muted-foreground line-clamp-1">
-                          {resource.course}
+                          {resource.courseTitle}
                         </p>
                       </div>
                     </div>
 
                     <div className="mt-4 flex items-center justify-between text-xs text-muted-foreground">
                       <span>{resource.size}</span>
-                      <span>By {resource.uploadedBy}</span>
+                      <span>{resource.type.toUpperCase()}</span>
                     </div>
 
-                    <Button variant="outline" className="mt-4 w-full gap-2" asChild>
+                    <Button
+                      variant="outline"
+                      className="mt-4 w-full gap-2"
+                      asChild
+                    >
                       <a href={resource.fileUrl} target="_blank" rel="noopener noreferrer">
                         <Download className="h-4 w-4" />
                         Download
@@ -173,11 +257,14 @@ export function ResourcesPage() {
         </div>
       )}
 
-      {!isLoading && !error && (
+      {/* Summary card */}
+      {!isLoading && !isError && resources.length > 0 && (
         <Card className="border-dashed">
           <CardContent className="p-6 text-center">
             <p className="text-sm text-muted-foreground">
-              Resources are organized by {courseCount} enrolled course{courseCount !== 1 ? 's' : ''}. New materials are added as they're uploaded.
+              Resources are organized by {resources.length > 0
+                ? new Set(resources.map((r) => r.courseId)).size
+                : 0} enrolled courses. New materials are added by your instructors.
             </p>
           </CardContent>
         </Card>

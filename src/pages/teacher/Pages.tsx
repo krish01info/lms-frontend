@@ -5,25 +5,26 @@ import { z } from 'zod'
 import { useNavigate, Link } from 'react-router-dom'
 import {
   BookOpen,
+  CheckCircle2,
   FileText,
-  Users,
   GraduationCap,
   Megaphone,
   Pencil,
+  Play,
+  Users,
+  X,
 } from 'lucide-react'
 import { PageShell } from '@/components/common/PageShell'
 import { PageSkeleton } from '@/components/common/Skeleton'
 import { ErrorState } from '@/components/common/ErrorState'
 import { EmptyState } from '@/components/common/EmptyState'
+import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent } from '@/components/ui/card'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
-import { Switch } from '@/components/ui/switch'
 import { toast } from 'sonner'
-
-
 import {
   Dialog,
   DialogContent,
@@ -33,11 +34,10 @@ import {
 } from '@/components/ui/dialog'
 import { useCreateCourse, useMyCourses } from '@/hooks/useCourseData'
 import { useAssignmentList, useCreateAssignment } from '@/hooks/useAssignmentData'
-import { useRoster, useMarkAttendance } from '@/hooks/useAttendanceData'
+import { useAutoRoster } from '@/hooks/useAttendanceData'
 import { useGradebook } from '@/hooks/useGradebookData'
 import { useAnnouncementList, useCreateAnnouncement } from '@/hooks/useAnnouncementData'
 import type { ApiAssignment, ApiAnnouncement } from '@/types'
-
 
 
 const schema = z.object({
@@ -308,8 +308,6 @@ function toIsoDate(d: Date) {
 export function TeacherAttendancePage() {
   const [courseId, setCourseId] = useState<string>('')
   const [date, setDate] = useState<string>(toIsoDate(new Date()))
-  // Local optimistic edits before "Save Attendance" is pressed — keyed by userId.
-  const [pendingStatus, setPendingStatus] = useState<Record<string, 'PRESENT' | 'ABSENT'>>({})
 
   const coursesQuery = useMyCourses()
   const courses = coursesQuery.data ?? []
@@ -317,43 +315,15 @@ export function TeacherAttendancePage() {
   // Default to the first course once courses load, if none picked yet.
   if (!courseId && courses.length > 0) setCourseId(courses[0].id)
 
-  const rosterQuery = useRoster(courseId || undefined, date)
-  const roster = rosterQuery.data ?? []
-  const markAttendance = useMarkAttendance(courseId, date)
-
-  const statusFor = (userId: string, defaultStatus: 'PRESENT' | 'ABSENT' | null) =>
-    pendingStatus[userId] ?? defaultStatus ?? 'PRESENT' // unmarked days default to Present — mark the exceptions
-
-  const toggle = (userId: string, current: 'PRESENT' | 'ABSENT') => {
-    setPendingStatus((prev) => ({ ...prev, [userId]: current === 'PRESENT' ? 'ABSENT' : 'PRESENT' }))
-  }
-
-  const handleSave = () => {
-    const records = roster.map((s) => ({ userId: s.userId, status: statusFor(s.userId, s.status) }))
-    markAttendance.mutate(
-      { courseId, date, records },
-      {
-        onSuccess: () => {
-          const presentCount = records.filter((r) => r.status === 'PRESENT').length
-          toast.success(`Attendance saved for ${date} — ${presentCount} present, ${records.length - presentCount} absent.`)
-          setPendingStatus({})
-        },
-        onError: () => toast.error('Could not save attendance. Please try again.'),
-      }
-    )
-  }
-
-  const isLoading = coursesQuery.isLoading || rosterQuery.isLoading
+  // ── Auto attendance (from lesson completion) ────────────────────────────
+  const autoRosterQuery = useAutoRoster(courseId || undefined, date)
+  const autoRoster = autoRosterQuery.data?.roster ?? []
+  const autoLessons = autoRosterQuery.data?.lessons ?? []
 
   return (
     <PageShell
       title="Attendance"
-      description="Mark and manage student attendance"
-      actions={
-        <Button onClick={handleSave} disabled={!courseId || roster.length === 0 || markAttendance.isPending}>
-          {markAttendance.isPending ? 'Saving…' : 'Save Attendance'}
-        </Button>
-      }
+      description="Auto-tracked from lesson completion"
     >
       <div className="mb-4 flex flex-col gap-3 sm:flex-row sm:items-center">
         <div className="max-w-xs flex-1">
@@ -370,47 +340,78 @@ export function TeacherAttendancePage() {
           type="date"
           value={date}
           max={toIsoDate(new Date())}
-          onChange={(e) => { setDate(e.target.value); setPendingStatus({}) }}
+          onChange={(e) => setDate(e.target.value)}
           className="max-w-[180px]"
         />
       </div>
 
-      {isLoading ? (
-        <PageSkeleton />
-      ) : rosterQuery.isError ? (
-        <ErrorState message="Could not load the roster. Please try again." onRetry={() => rosterQuery.refetch()} />
-      ) : roster.length === 0 ? (
-        <EmptyState
-          icon={Users}
-          title="No enrolled students"
-          description="This course has no active enrollments yet."
-        />
-      ) : (
-        <Card><CardContent className="p-0">
-          <table className="w-full">
-            <thead><tr className="border-b"><th className="p-4 text-left text-sm font-medium">Student</th><th className="p-4 text-left text-sm font-medium">Status</th></tr></thead>
-            <tbody>
-              {roster.map((student) => {
-                const status = statusFor(student.userId, student.status)
-                const isPresent = status === 'PRESENT'
-                return (
-                  <tr key={student.userId} className="border-b">
-                    <td className="p-4 text-sm">{student.name}</td>
-                    <td className="p-4">
-                      <div className="flex items-center gap-2">
-                        <Switch checked={isPresent} onCheckedChange={() => toggle(student.userId, status)} />
-                        <span className={isPresent ? 'text-xs text-emerald-600' : 'text-xs text-destructive'}>
-                          {isPresent ? 'Present' : 'Absent'}
-                        </span>
-                      </div>
-                    </td>
-                  </tr>
-                )
-              })}
-            </tbody>
-          </table>
-        </CardContent></Card>
-      )}
+      <div className="space-y-4">
+        {autoLessons.length > 0 && (
+          <div className="flex flex-wrap items-center gap-2">
+            <span className="text-sm text-muted-foreground">
+              {autoLessons.length} lesson{autoLessons.length === 1 ? '' : 's'} on this date:
+            </span>
+            {autoLessons.map((lesson: any) => (
+              <Badge key={lesson.id} variant="secondary" className="gap-1.5">
+                <Play className="h-3 w-3" />
+                {lesson.title}
+              </Badge>
+            ))}
+          </div>
+        )}
+
+        {autoRosterQuery.isLoading ? (
+          <PageSkeleton />
+        ) : autoRosterQuery.isError ? (
+          <ErrorState message="Could not load attendance. Please try again." onRetry={() => autoRosterQuery.refetch()} />
+        ) : autoLessons.length === 0 ? (
+          <EmptyState
+            icon={Play}
+            title="No lessons on this date"
+            description="No lessons were created on this date. Try a different date when a lesson was uploaded."
+          />
+        ) : autoRoster.length === 0 ? (
+          <EmptyState
+            icon={Users}
+            title="No enrolled students"
+            description="This course has no active enrollments yet."
+          />
+        ) : (
+          <Card><CardContent className="p-0">
+            <table className="w-full">
+              <thead><tr className="border-b"><th className="p-4 text-left text-sm font-medium">Student</th><th className="p-4 text-left text-sm font-medium">Status</th></tr></thead>
+              <tbody>
+                {autoRoster.map((student: any) => {
+                  const isPresent = student.status === 'PRESENT'
+                  return (
+                    <tr key={student.userId} className="border-b">
+                      <td className="p-4 text-sm">{student.name}</td>
+                      <td className="p-4">
+                        <div className="flex items-center gap-2">
+                          {isPresent ? (
+                            <span className="flex items-center gap-1.5 text-sm text-emerald-600">
+                              <CheckCircle2 className="h-4 w-4" />
+                              Present — Completed lesson
+                            </span>
+                          ) : (
+                            <span className="flex items-center gap-1.5 text-sm text-destructive">
+                              <X className="h-4 w-4" />
+                              Absent — Not completed yet
+                            </span>
+                          )}
+                        </div>
+                      </td>
+                    </tr>
+                  )
+                })}
+              </tbody>
+            </table>
+            <div className="border-t px-4 py-3 text-xs text-muted-foreground">
+              Attendance is auto-computed from lesson completion. Students who completed any lesson on this date are marked Present.
+            </div>
+          </CardContent></Card>
+        )}
+      </div>
     </PageShell>
   )
 }

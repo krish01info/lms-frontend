@@ -256,7 +256,7 @@ export function StudentDashboard() {
           trend="up"
           icon={Award}
           iconClassName="bg-emerald-500/10"
-          />
+        />
         <StatCard
           label="Courses Active"
           value={isCoursesLoading ? '—' : courses.length}

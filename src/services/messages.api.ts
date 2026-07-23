@@ -9,6 +9,10 @@ export interface ApiConversationSummary {
     name: string
     avatar: string | null
   }
+  course: {
+    id: string
+    title: string
+  } | null
   lastMessage: string | null
   lastMessageAt: string
   lastMessageSenderId: string | null
