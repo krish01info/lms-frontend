@@ -33,7 +33,12 @@ const { data: progressData } = useQuery({
 
 export function ResultsPage() {
   const { user } = useAuth()
-  const gpa = progressData?.length ? Number(((progressData.reduce((s: number, c: any) => s + c.percentage, 0) / progressData.length) / 25).toFixed(2)) : 3.85
+  const avgProgress = progressData?.length
+  ? progressData.reduce((s: number, c: any) => s + c.percentage, 0) / progressData.length
+  : 0
+  const gpa = progressData?.length
+  ? Number(((progressData.reduce((s: number, c: any) => s + c.percentage, 0) / progressData.length) / 25).toFixed(2))
+  : 3.85
   const totalStudents = 156  
   const classRank = 12
   const percentile = Math.round(((totalStudents - classRank) / totalStudents) * 100)
