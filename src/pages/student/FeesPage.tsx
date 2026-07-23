@@ -1,5 +1,6 @@
 import { motion } from 'framer-motion'
 import { format, parseISO } from 'date-fns'
+import { useQuery } from '@tanstack/react-query'
 import { AlertCircle, CheckCircle, Clock, CreditCard, Receipt } from 'lucide-react'
 import { PageHeader } from '@/components/common/PageHeader'
 import { StatCard } from '@/components/common/StatCard'
@@ -7,20 +8,54 @@ import { Badge } from '@/components/ui/badge'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Progress } from '@/components/ui/progress'
 import { Separator } from '@/components/ui/separator'
-import { mockPayments } from '@/constants/mockData'
 import { cn } from '@/utils/cn'
+import api from '@/services/api'
 
 const statusConfig = {
-  paid: { label: 'Paid', variant: 'success' as const, icon: CheckCircle },
-  pending: { label: 'Pending', variant: 'warning' as const, icon: Clock },
-  overdue: { label: 'Overdue', variant: 'destructive' as const, icon: AlertCircle },
+  PAID: { label: 'Paid', variant: 'success' as const, icon: CheckCircle },
+  PENDING: { label: 'Pending', variant: 'warning' as const, icon: Clock },
 }
 
 export function FeesPage() {
-  const totalFees = mockPayments.reduce((acc, p) => acc + p.amount, 0)
-  const paidAmount = mockPayments.filter((p) => p.status === 'paid').reduce((acc, p) => acc + p.amount, 0)
-  const pendingAmount = mockPayments.filter((p) => p.status !== 'paid').reduce((acc, p) => acc + p.amount, 0)
-  const paidPct = Math.round((paidAmount / totalFees) * 100)
+  const { data, isLoading } = useQuery({
+    queryKey: ['fees-my'],
+    queryFn: async () => {
+      const res = await api.get('/fees/my')
+      return res.data.data as {
+        totalFees: number
+        amountPaid: number
+        outstanding: number
+        percentagePaid: number
+        feeItems: Array<{
+          id: string
+          title: string
+          courseId: string
+          amount: number
+          status: 'PAID' | 'PENDING'
+          referenceDate: string
+        }>
+      }
+    },
+  })
+
+  const totalFees = data?.totalFees ?? 0
+  const paidAmount = data?.amountPaid ?? 0
+  const pendingAmount = data?.outstanding ?? 0
+  const paidPct = data?.percentagePaid ?? 0
+  const feeItems = data?.feeItems ?? []
+
+  if (isLoading) {
+    return (
+      <div className="space-y-6">
+        <PageHeader title="Fees" description="View your fee structure and payment status" />
+        <div className="grid gap-4 sm:grid-cols-3">
+          {[1, 2, 3].map((i) => (
+            <div key={i} className="h-24 rounded-2xl bg-muted animate-pulse" />
+          ))}
+        </div>
+      </div>
+    )
+  }
 
   return (
     <div className="space-y-6">
@@ -58,8 +93,14 @@ export function FeesPage() {
         </CardContent>
       </Card>
 
+      {feeItems.length === 0 && (
+        <p className="text-sm text-muted-foreground py-4 text-center">
+          No fees found. Enroll in a course to see fee details here.
+        </p>
+      )}
+
       <div className="grid gap-4 sm:grid-cols-2">
-        {mockPayments.map((fee, i) => {
+        {feeItems.map((fee, i) => {
           const config = statusConfig[fee.status]
           const Icon = config.icon
 
@@ -76,17 +117,17 @@ export function FeesPage() {
                     <div className="flex gap-4">
                       <div className={cn(
                         'flex h-12 w-12 shrink-0 items-center justify-center rounded-2xl',
-                        fee.status === 'paid' ? 'bg-emerald-500/10' : fee.status === 'overdue' ? 'bg-destructive/10' : 'bg-amber-500/10'
+                        fee.status === 'PAID' ? 'bg-emerald-500/10' : 'bg-amber-500/10'
                       )}>
                         <Icon className={cn(
                           'h-6 w-6',
-                          fee.status === 'paid' ? 'text-emerald-600' : fee.status === 'overdue' ? 'text-destructive' : 'text-amber-600'
+                          fee.status === 'PAID' ? 'text-emerald-600' : 'text-amber-600'
                         )} />
                       </div>
                       <div>
                         <h3 className="font-semibold">{fee.title}</h3>
                         <p className="text-sm text-muted-foreground">
-                          Due {format(parseISO(fee.dueDate), 'MMM d, yyyy')}
+                          Enrolled {format(parseISO(fee.referenceDate), 'MMM d, yyyy')}
                         </p>
                       </div>
                     </div>
