@@ -1,15 +1,18 @@
-import { useState, useEffect } from 'react'
+import { useState } from 'react'
 import { useForm } from 'react-hook-form'
 import { zodResolver } from '@hookform/resolvers/zod'
 import { z } from 'zod'
 import { useNavigate, Link } from 'react-router-dom'
 import {
   BookOpen,
+  CheckCircle2,
   FileText,
-  Users,
   GraduationCap,
   Megaphone,
   Pencil,
+  Play,
+  Users,
+  X,
 } from 'lucide-react'
 import { PageShell } from '@/components/common/PageShell'
 import { PageSkeleton } from '@/components/common/Skeleton'
@@ -21,7 +24,6 @@ import { Card, CardContent } from '@/components/ui/card'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
-import { Switch } from '@/components/ui/switch'
 import { toast } from 'sonner'
 import {
   Dialog,
@@ -30,7 +32,6 @@ import {
   DialogTitle,
   DialogDescription,
 } from '@/components/ui/dialog'
-import { toast } from 'sonner'
 import { useCreateCourse, useMyCourses } from '@/hooks/useCourseData'
 import { useAssignmentList, useCreateAssignment } from '@/hooks/useAssignmentData'
 import { useAutoRoster } from '@/hooks/useAttendanceData'
