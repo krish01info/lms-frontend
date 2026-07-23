@@ -1,7 +1,8 @@
 import { useParams, Link } from 'react-router-dom'
 import { motion } from 'framer-motion'
-import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
-import { BookOpen, CheckCircle2, Clock, Download, FileText, HelpCircle, MessageSquare, PenTool, Play, Star, Trophy, Users } from 'lucide-react'
+import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
+import { BookOpen, CheckCircle2, Clock, Download, FileText, HelpCircle, Loader2, MessageSquare, PenTool, Play, Star, Trophy, Users } from 'lucide-react'
+import { toast } from 'sonner'
 import { Breadcrumbs } from '@/components/common/Breadcrumbs'
 import { EmptyState } from '@/components/common/EmptyState'
 import { Badge } from '@/components/ui/badge'
@@ -62,20 +63,39 @@ export function CourseDetailPage() {
     },
   })
 
-  const markCompleteMutation = useMutation({
+  // Per-lesson progress for this course (includes completed/watchedTime)
+  const { data: lessonProgress, isLoading: lessonProgressLoading } = useQuery({
+    queryKey: ['progress-course', id],
+    queryFn: async () => {
+      const res = await api.get(`/progress/${id}`)
+      return res.data.data.lessons
+    },
+    enabled: !!id,
+  })
+
+  // Mutation to mark a lesson as complete
+  const completeMutation = useMutation({
     mutationFn: async (lessonId: string) => {
-      const res = await api.patch(`/progress/${lessonId}`)
+      const res = await api.patch(`/progress/${lessonId}`, { completed: true })
       return res.data.data.progress
     },
     onSuccess: () => {
-      // Refresh everywhere progress is shown
+      queryClient.invalidateQueries({ queryKey: ['progress-course', id] })
       queryClient.invalidateQueries({ queryKey: ['progress-my'] })
-      queryClient.invalidateQueries({ queryKey: ['course-progress-detail', id] })
+      queryClient.invalidateQueries({ queryKey: ['attendance-my'] })
+      toast.success('Lesson marked as complete!')
+    },
+    onError: () => {
+      toast.error('Could not mark lesson as complete. Please try again.')
     },
   })
 
-  const isLessonCompleted = (lessonId: string) => {
-    return courseProgressDetail?.find((l: any) => l.id === lessonId)?.completed ?? false
+  // Build a map of lessonId -> completed status from the per-lesson progress
+  const completedMap = new Map<string, boolean>()
+  if (lessonProgress) {
+    lessonProgress.forEach((lp: any) => {
+      completedMap.set(lp.id, lp.completed)
+    })
   }
 
   const courseProgress = progressData?.find((p: any) => p.courseId === id)
@@ -153,12 +173,12 @@ export function CourseDetailPage() {
 
               {!lessonsLoading &&
                 lessons?.map((lesson: any) => {
-                  const completed = isLessonCompleted(lesson.id)
+                  const isCompleted = completedMap.get(lesson.id) ?? false
                   return (
                     <Card key={lesson.id} className="hover:shadow-md transition-shadow">
                       <CardContent className="flex items-center gap-4 p-4">
-                        <div className={`flex h-12 w-12 items-center justify-center rounded-2xl ${completed ? 'bg-emerald-500/10' : 'bg-primary/10'}`}>
-                          {completed ? (
+                        <div className={`flex h-12 w-12 items-center justify-center rounded-2xl ${isCompleted ? 'bg-emerald-500/10' : 'bg-primary/10'}`}>
+                          {isCompleted ? (
                             <CheckCircle2 className="h-5 w-5 text-emerald-600" />
                           ) : (
                             <Play className="h-5 w-5 text-primary" />
@@ -168,22 +188,28 @@ export function CourseDetailPage() {
                           <p className="font-medium">{lesson.title}</p>
                           <p className="text-sm text-muted-foreground">
                             {lesson.description || `Lesson ${lesson.order}`}
-                            {lesson.duration ? ` · ${lesson.duration} min` : ''}
+                            {lesson.duration ? ` · ${Math.floor(lesson.duration / 60)}:${String(lesson.duration % 60).padStart(2, '0')}` : ''}
                           </p>
                         </div>
-                        {lesson.isPreview && <Badge variant="secondary">Preview</Badge>}
-                        {completed ? (
-                          <Badge variant="secondary">Completed</Badge>
-                        ) : (
+                        <div className="flex items-center gap-2">
+                          {lesson.isPreview && <Badge variant="secondary">Preview</Badge>}
                           <Button
+                            variant={isCompleted ? 'outline' : 'default'}
                             size="sm"
-                            variant="outline"
-                            disabled={markCompleteMutation.isPending}
-                            onClick={() => markCompleteMutation.mutate(lesson.id)}
+                            onClick={() => completeMutation.mutate(lesson.id)}
+                            disabled={completeMutation.isPending}
+                            className={isCompleted ? 'border-emerald-200 text-emerald-700 hover:bg-emerald-50' : ''}
                           >
-                            Mark Complete
+                            {completeMutation.isPending ? (
+                              <Loader2 className="mr-1.5 h-3.5 w-3.5 animate-spin" />
+                            ) : isCompleted ? (
+                              <CheckCircle2 className="mr-1.5 h-3.5 w-3.5" />
+                            ) : (
+                              <CheckCircle2 className="mr-1.5 h-3.5 w-3.5" />
+                            )}
+                            {isCompleted ? 'Completed' : 'Mark Complete'}
                           </Button>
-                        )}
+                        </div>
                       </CardContent>
                     </Card>
                   )

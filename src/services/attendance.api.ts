@@ -24,3 +24,20 @@ export async function getAttendanceSummary(courseId: string) {
   const { data } = await api.get('/attendance/summary', { params: { courseId } })
   return data.data as { totalMarkedDays: number; summary: ApiAttendanceSummaryEntry[] }
 }
+
+// GET /attendance/auto-roster?courseId=&date=  — auto-computed from lesson completion
+export interface AutoRosterLesson {
+  id: string
+  title: string
+}
+
+export interface AutoRosterResponse {
+  lessons: AutoRosterLesson[]
+  roster: ApiAttendanceRosterEntry[]
+  date: string
+}
+
+export async function getAutoRoster(courseId: string, date: string) {
+  const { data } = await api.get('/attendance/auto-roster', { params: { courseId, date } })
+  return data.data as AutoRosterResponse
+}
