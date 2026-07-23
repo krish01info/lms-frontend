@@ -249,7 +249,14 @@ export function StudentDashboard() {
 
       <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
         <StatCard label="Attendance" value={`${Math.round(attendancePercentage)}%`} icon={Users} />
-        <StatCard label="Current GPA" value="3.85" change="Sample data" trend="up" icon={Award} iconClassName="bg-emerald-500/10" />
+        <StatCard
+          label="Avg Progress"
+          value={progress.length ? `${Math.round(progress.reduce((s: number, c: any) => s + c.percentage, 0) / progress.length)}%` : '—'}
+          change="Across all courses"
+          trend="up"
+          icon={Award}
+          iconClassName="bg-emerald-500/10"
+          />
         <StatCard
           label="Courses Active"
           value={isCoursesLoading ? '—' : courses.length}
