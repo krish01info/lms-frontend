@@ -50,7 +50,7 @@ export function BottomNav({ role }: BottomNavProps) {
           <NavLink
             key={item.href}
             to={item.href}
-            end={item.href.split('/').length <= 2}
+            end={(item.href ?? '').split('/').length <= 2}
             className={({ isActive }) =>
               cn(
                 'flex flex-col items-center gap-1 rounded-2xl px-4 py-2 text-xs transition-colors',

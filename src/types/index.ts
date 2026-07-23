@@ -82,6 +82,22 @@ export interface ApiResource {
     name: string
   }
 }
+export type ResourceType = 'pdf' | 'doc' | 'video' | 'image' | 'other'
+
+// Frontend-facing shape, derived from ApiResource via transformResource()
+export interface Resource {
+  id: string
+  title: string
+  course: string
+  courseId: string
+  fileUrl: string
+  fileType: string
+  type: ResourceType
+  size: string
+  sizeBytes: number
+  uploadedBy: string
+  createdAt: string
+}
 
 export interface TeachingStats {
   totalStudents: number
@@ -113,6 +129,7 @@ export interface Course {
   category: string
   duration: string
   status: 'active' | 'completed' | 'upcoming'
+  price?: number
 }
 
 export interface Assignment {

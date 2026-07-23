@@ -1,7 +1,7 @@
 import { useParams, Link } from 'react-router-dom'
 import { motion } from 'framer-motion'
-import { useQuery } from '@tanstack/react-query'
-import { BookOpen, Clock, Download, FileText, HelpCircle, MessageSquare, PenTool, Play, Star, Trophy, Users } from 'lucide-react'
+import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
+import { BookOpen, CheckCircle2, Clock, Download, FileText, HelpCircle, MessageSquare, PenTool, Play, Star, Trophy, Users } from 'lucide-react'
 import { Breadcrumbs } from '@/components/common/Breadcrumbs'
 import { EmptyState } from '@/components/common/EmptyState'
 import { Badge } from '@/components/ui/badge'
@@ -18,6 +18,7 @@ import { transformCourse, transformLesson } from '@/utils/transformers'
 
 export function CourseDetailPage() {
   const { id } = useParams()
+  const queryClient = useQueryClient()
 
   const {
     data: course,
@@ -41,6 +42,17 @@ export function CourseDetailPage() {
     enabled: !!id,
   })
 
+  // Per-lesson completion status for THIS course — separate from the
+  // per-course rollup used elsewhere (ProgressPage/ProfilePage/Dashboard)
+  const { data: courseProgressDetail } = useQuery({
+    queryKey: ['course-progress-detail', id],
+    queryFn: async () => {
+      const res = await api.get(`/progress/${id}`)
+      return res.data.data.lessons
+    },
+    enabled: !!id,
+  })
+
   // Same queryKey as ProgressPage/ProfilePage — shares cache
   const { data: progressData, isLoading: progressLoading } = useQuery({
     queryKey: ['progress-my'],
@@ -49,6 +61,22 @@ export function CourseDetailPage() {
       return res.data.data.progress
     },
   })
+
+  const markCompleteMutation = useMutation({
+    mutationFn: async (lessonId: string) => {
+      const res = await api.patch(`/progress/${lessonId}`)
+      return res.data.data.progress
+    },
+    onSuccess: () => {
+      // Refresh everywhere progress is shown
+      queryClient.invalidateQueries({ queryKey: ['progress-my'] })
+      queryClient.invalidateQueries({ queryKey: ['course-progress-detail', id] })
+    },
+  })
+
+  const isLessonCompleted = (lessonId: string) => {
+    return courseProgressDetail?.find((l: any) => l.id === lessonId)?.completed ?? false
+  }
 
   const courseProgress = progressData?.find((p: any) => p.courseId === id)
   const progressPercentage = courseProgress?.percentage ?? 0
@@ -124,23 +152,42 @@ export function CourseDetailPage() {
               )}
 
               {!lessonsLoading &&
-                lessons?.map((lesson: any) => (
-                  <Card key={lesson.id} className="hover:shadow-md transition-shadow">
-                    <CardContent className="flex items-center gap-4 p-4">
-                      <div className="flex h-12 w-12 items-center justify-center rounded-2xl bg-primary/10">
-                        <Play className="h-5 w-5 text-primary" />
-                      </div>
-                      <div className="flex-1">
-                        <p className="font-medium">{lesson.title}</p>
-                        <p className="text-sm text-muted-foreground">
-                          {lesson.description || `Lesson ${lesson.order}`}
-                          {lesson.duration ? ` · ${lesson.duration} min` : ''}
-                        </p>
-                      </div>
-                      {lesson.isPreview && <Badge variant="secondary">Preview</Badge>}
-                    </CardContent>
-                  </Card>
-                ))}
+                lessons?.map((lesson: any) => {
+                  const completed = isLessonCompleted(lesson.id)
+                  return (
+                    <Card key={lesson.id} className="hover:shadow-md transition-shadow">
+                      <CardContent className="flex items-center gap-4 p-4">
+                        <div className={`flex h-12 w-12 items-center justify-center rounded-2xl ${completed ? 'bg-emerald-500/10' : 'bg-primary/10'}`}>
+                          {completed ? (
+                            <CheckCircle2 className="h-5 w-5 text-emerald-600" />
+                          ) : (
+                            <Play className="h-5 w-5 text-primary" />
+                          )}
+                        </div>
+                        <div className="flex-1">
+                          <p className="font-medium">{lesson.title}</p>
+                          <p className="text-sm text-muted-foreground">
+                            {lesson.description || `Lesson ${lesson.order}`}
+                            {lesson.duration ? ` · ${lesson.duration} min` : ''}
+                          </p>
+                        </div>
+                        {lesson.isPreview && <Badge variant="secondary">Preview</Badge>}
+                        {completed ? (
+                          <Badge variant="secondary">Completed</Badge>
+                        ) : (
+                          <Button
+                            size="sm"
+                            variant="outline"
+                            disabled={markCompleteMutation.isPending}
+                            onClick={() => markCompleteMutation.mutate(lesson.id)}
+                          >
+                            Mark Complete
+                          </Button>
+                        )}
+                      </CardContent>
+                    </Card>
+                  )
+                })}
             </TabsContent>
 
             <TabsContent value="resources" className="space-y-3">

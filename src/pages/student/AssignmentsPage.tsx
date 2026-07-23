@@ -2,6 +2,7 @@ import { useEffect, useMemo, useState } from 'react'
 import { motion } from 'framer-motion'
 import { ClipboardList, Loader2 } from 'lucide-react'
 import { AssignmentCard } from '@/components/common/AssignmentCard'
+import { SubmitAssignmentModal } from '@/components/common/SubmitAssignmentModal'
 import { EmptyState } from '@/components/common/EmptyState'
 import { PageHeader } from '@/components/common/PageHeader'
 import { SearchBar } from '@/components/common/SearchBar'
@@ -27,32 +28,25 @@ export function AssignmentsPage() {
   const [assignments, setAssignments] = useState<Assignment[]>([])
   const [isLoading, setIsLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
+  const [submitTarget, setSubmitTarget] = useState<Assignment | null>(null)
+  const [modalOpen, setModalOpen] = useState(false)
+
+  async function fetchAssignments() {
+    setIsLoading(true)
+    setError(null)
+    try {
+      const res = await api.get('/assignments')
+      const raw = res.data?.data?.assignments ?? []
+      setAssignments(raw.map(transformAssignment))
+    } catch (err: any) {
+      setError(err?.response?.data?.message || 'Failed to load assignments')
+    } finally {
+      setIsLoading(false)
+    }
+  }
 
   useEffect(() => {
-    let cancelled = false
-
-    async function fetchAssignments() {
-      setIsLoading(true)
-      setError(null)
-      try {
-        const res = await api.get('/assignments')
-        const raw = res.data?.data?.assignments ?? []
-        if (!cancelled) {
-          setAssignments(raw.map(transformAssignment))
-        }
-      } catch (err: any) {
-        if (!cancelled) {
-          setError(err?.response?.data?.message || 'Failed to load assignments')
-        }
-      } finally {
-        if (!cancelled) setIsLoading(false)
-      }
-    }
-
     fetchAssignments()
-    return () => {
-      cancelled = true
-    }
   }, [])
 
   const filtered = useMemo(() => {
@@ -68,6 +62,11 @@ export function AssignmentsPage() {
   const pendingCount = assignments.filter(
     (a) => a.status === 'pending' || a.status === 'overdue'
   ).length
+
+  function handleOpenSubmit(assignment: Assignment) {
+    setSubmitTarget(assignment)
+    setModalOpen(true)
+  }
 
   return (
     <div className="space-y-6">
@@ -120,10 +119,21 @@ export function AssignmentsPage() {
           className="space-y-4"
         >
           {filtered.map((assignment) => (
-            <AssignmentCard key={assignment.id} assignment={assignment} />
+            <AssignmentCard
+              key={assignment.id}
+              assignment={assignment}
+              onSubmit={() => handleOpenSubmit(assignment)}
+            />
           ))}
         </motion.div>
       )}
+
+      <SubmitAssignmentModal
+        assignment={submitTarget}
+        open={modalOpen}
+        onOpenChange={setModalOpen}
+        onSuccess={fetchAssignments}
+      />
     </div>
   )
 }
