@@ -126,6 +126,14 @@ export function StudentDashboard() {
     },
   })
 
+  const { data: weeklyHours } = useQuery({
+  queryKey: ['weekly-hours'],
+  queryFn: async () => {
+    const res = await api.get('/progress/my/weekly-hours')
+    return res.data.data.weeklyHours
+  },
+})
+
   const courses = courseData || []
   const progress = progressData || []
   const announcements = announcementsData || []
@@ -215,19 +223,32 @@ export function StudentDashboard() {
 
       <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
         <StatCard label="Attendance" value={`${Math.round(attendancePercentage)}%`} icon={Users} />
-        <StatCard label="Current GPA" value="3.85" change="Sample data" trend="up" icon={Award} iconClassName="bg-emerald-500/10" />
+        <StatCard
+  label="Avg Progress"
+  value={progressData?.length ? `${Math.round(progressData.reduce((s: number, c: any) => s + c.percentage, 0) / progressData.length)}%` : '—'}
+  change="Across all courses"
+  trend="up"
+  icon={Award}
+  iconClassName="bg-emerald-500/10"
+/>
         <StatCard
           label="Courses Active"
           value={isCoursesLoading ? '—' : courses.length}
           icon={BookOpen}
           iconClassName="bg-secondary/10"
         />
-        <StatCard label="Learning Hours" value="24.5h" change="This week (sample)" trend="neutral" icon={Clock} />
+        <StatCard
+  label="Learning Hours"
+  value={weeklyHours ? `${weeklyHours.reduce((s: number, d: any) => s + d.hours, 0).toFixed(1)}h` : '—'}
+  change="This week"
+  trend="neutral"
+  icon={Clock}
+/>
       </div>
 
       <div className="grid gap-6 lg:grid-cols-3">
         <div className="lg:col-span-2 space-y-6">
-          <ChartCard title="Weekly Learning Progress (sample)" data={weeklyProgressData} dataKey="hours" type="area" />
+          <ChartCard title="Weekly Learning Progress" data={weeklyHours || weeklyProgressData} dataKey="hours" type="area" />
 
           <Card>
             <CardHeader className="flex flex-row items-center justify-between">

@@ -9,6 +9,8 @@ import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Progress } from '@/components/ui/progress'
 import { subjectScores } from '@/constants/mockData'
 import { useAuth } from '@/contexts/AuthContext'
+import { useQuery } from '@tanstack/react-query'
+import api from '@/services/api'
 
 const chartData = subjectScores.map((s) => ({
   name: s.subject,
@@ -21,11 +23,24 @@ const gradeBreakdown = [
   { grade: 'B+', count: 1, color: 'bg-blue-500' },
 ]
 
+const { data: progressData } = useQuery({
+  queryKey: ['progress-my'],
+  queryFn: async () => {
+    const res = await api.get('/progress/my')
+    return res.data.data.progress
+  },
+})
+
 export function ResultsPage() {
   const { user } = useAuth()
-  const gpa = 3.85
+  const avgProgress = progressData?.length
+  ? progressData.reduce((s: number, c: any) => s + c.percentage, 0) / progressData.length
+  : 0
+  const gpa = progressData?.length
+  ? Number(((progressData.reduce((s: number, c: any) => s + c.percentage, 0) / progressData.length) / 25).toFixed(2))
+  : 3.85
+  const totalStudents = 156  
   const classRank = 12
-  const totalStudents = 156
   const percentile = Math.round(((totalStudents - classRank) / totalStudents) * 100)
 
   return (
