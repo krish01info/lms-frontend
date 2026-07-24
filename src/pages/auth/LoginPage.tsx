@@ -72,8 +72,8 @@ export function LoginPage() {
       await login(data.email, data.password, data.role)
       toast.success('Welcome back!')
       navigate(getDashboardPath(data.role))
-    } catch {
-      toast.error('Invalid credentials')
+    } catch (err: any) {
+      toast.error(err?.message || 'Invalid credentials. Please check your email and password.')
     } finally {
       setIsLoading(false)
     }

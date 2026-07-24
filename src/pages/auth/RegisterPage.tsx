@@ -42,8 +42,8 @@ export function RegisterPage() {
       await registerUser(data.name, data.email, data.password, data.role)
       toast.success('Account created successfully!')
       navigate(getDashboardPath(data.role))
-    } catch {
-      toast.error('Registration failed')
+    } catch (err: any) {
+      toast.error(err?.message || 'Registration failed. Please try again.')
     } finally {
       setIsLoading(false)
     }
@@ -74,8 +74,8 @@ export function RegisterPage() {
         </div>
         <div className="space-y-2">
           <Label>Role</Label>
-          <Select value={watch('role')} onValueChange={(v) => setValue('role', v as UserRole)}>
-            <SelectTrigger><SelectValue /></SelectTrigger>
+          <Select value={watch('role')} onValueChange={(v) => setValue('role', v as UserRole, { shouldValidate: true, shouldTouch: true })}>
+            <SelectTrigger><SelectValue placeholder="Select a role" /></SelectTrigger>
             <SelectContent>
               <SelectItem value="student">Student</SelectItem>
               <SelectItem value="teacher">Teacher</SelectItem>
@@ -83,6 +83,7 @@ export function RegisterPage() {
               <SelectItem value="admin">Administrator</SelectItem>
             </SelectContent>
           </Select>
+          {errors.role && <p className="text-xs text-destructive">{errors.role.message}</p>}
         </div>
         <Button type="submit" className="w-full" disabled={isLoading}>
           {isLoading ? <Loader2 className="h-4 w-4 animate-spin" /> : 'Create Account'}
