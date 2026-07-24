@@ -4,7 +4,7 @@ import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { toast } from 'sonner'
 import { useAuth } from '@/contexts/AuthContext'
 import api from '@/services/api'
-import type { Notification } from '@/types'
+import type { ApiNotification } from '@/types'
 
 const TOKEN_KEY = 'learnflow_access_token'
 let socket: Socket | null = null
@@ -17,7 +17,7 @@ export function useNotifications() {
     queryKey: ['notifications'],
     queryFn: async () => {
       const { data } = await api.get('/notifications', { params: { limit: 50 } })
-      return data.data as { items: Notification[]; unreadCount: number }
+      return data.data as { items: ApiNotification[]; unreadCount: number }
     },
     enabled: isAuthenticated,
   })
@@ -42,7 +42,7 @@ export function useNotifications() {
       socket = io(socketUrl, { auth: { token }, withCredentials: true })
     }
 
-    const handleNew = (notification: Notification) => {
+    const handleNew = (notification: ApiNotification) => {
       queryClient.invalidateQueries({ queryKey: ['notifications'] })
       queryClient.invalidateQueries({ queryKey: ['notifications', 'unread-count'] })
       toast(notification.title, { description: notification.message })
@@ -80,8 +80,12 @@ export function useNotifications() {
     notifications: listQuery.data?.items ?? [],
     unreadCount: unreadQuery.data ?? 0,
     isLoading: listQuery.isLoading,
+    isError: listQuery.isError,
+    refetch: listQuery.refetch,
     markAsRead: markAsReadMutation.mutate,
+    isMarkingAsRead: markAsReadMutation.isPending,
     markAllAsRead: markAllAsReadMutation.mutate,
+    isMarkingAllAsRead: markAllAsReadMutation.isPending,
     remove: deleteMutation.mutate,
   }
 }

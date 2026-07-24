@@ -6,7 +6,7 @@ import { Navbar } from './Navbar'
 import { Sidebar } from './Sidebar'
 import { navigationByRole } from '@/constants/navigation'
 import { useAuth } from '@/contexts/AuthContext'
-import { useUnreadCount } from '@/hooks/useNotificationData'
+import { useNotifications } from '@/hooks/useNotifications'
 
 interface DashboardLayoutProps {
   children?: ReactNode
@@ -16,19 +16,24 @@ export function DashboardLayout({ children }: DashboardLayoutProps) {
   const { user } = useAuth()
   const [sidebarOpen, setSidebarOpen] = useState(false)
   // Called unconditionally (before the early return below) to satisfy the
-  // Rules of Hooks — /notifications/me safely 401s if there's no user yet,
-  // react-query just treats it as an errored, ignorable query in that case.
-  const { data: unreadData } = useUnreadCount()
+  // Rules of Hooks — useNotifications is enabled/disabled internally based
+  // on auth state, so it's safe to call even before `user` is set.
+  const { unreadCount } = useNotifications()
 
   if (!user) return null
 
-  const navItems = navigationByRole[user.role]
+  // Only the Notifications entry's badge is replaced with the real unread
+  // count — every other badge (Assignments, Messages, etc.) is left exactly
+  // as the static nav config defines it, untouched.
+  const navItems = navigationByRole[user.role].map((item) =>
+    item.href.endsWith('/notifications') ? { ...item, badge: unreadCount || undefined } : item
+  )
 
   return (
     <div className="flex min-h-screen bg-background">
       <Sidebar navItems={navItems} isOpen={sidebarOpen} onClose={() => setSidebarOpen(false)} />
       <div className="flex flex-1 flex-col">
-        <Navbar onMenuClick={() => setSidebarOpen(true)} notificationCount={unreadData?.count ?? 0} />
+        <Navbar onMenuClick={() => setSidebarOpen(true)} notificationCount={unreadCount} />
         <main className="flex-1 overflow-auto gradient-mesh p-4 pb-24 lg:p-6 lg:pb-6">
           <motion.div
             initial={{ opacity: 0, y: 10 }}
