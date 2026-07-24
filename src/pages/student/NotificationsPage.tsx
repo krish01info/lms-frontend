@@ -14,37 +14,28 @@ import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent } from '@/components/ui/card'
 import { Tabs, TabsList, TabsTrigger } from '@/components/ui/tabs'
-import { mockNotifications } from '@/constants/mockData'
+import { useNotifications } from '@/hooks/useNotifications'
 import { cn } from '@/utils/cn'
-import type { Notification } from '@/types'
+import type { ApiNotification } from '@/types'
 
-const typeConfig: Record<Notification['type'], { icon: typeof Bell; color: string }> = {
-  assignment: { icon: ClipboardList, color: 'bg-blue-500/10 text-blue-600' },
-  quiz: { icon: GraduationCap, color: 'bg-purple-500/10 text-purple-600' },
-  announcement: { icon: Megaphone, color: 'bg-emerald-500/10 text-emerald-600' },
-  payment: { icon: CreditCard, color: 'bg-amber-500/10 text-amber-600' },
-  message: { icon: Bell, color: 'bg-primary/10 text-primary' },
+const typeConfig: Record<ApiNotification['type'], { icon: typeof Bell; color: string }> = {
+  GENERAL: { icon: Bell, color: 'bg-primary/10 text-primary' },
+  ENROLLMENT: { icon: GraduationCap, color: 'bg-emerald-500/10 text-emerald-600' },
+  ASSIGNMENT: { icon: ClipboardList, color: 'bg-blue-500/10 text-blue-600' },
+  QUIZ: { icon: GraduationCap, color: 'bg-purple-500/10 text-purple-600' },
+  PAYMENT: { icon: CreditCard, color: 'bg-amber-500/10 text-amber-600' },
+  CERTIFICATE: { icon: Megaphone, color: 'bg-rose-500/10 text-rose-600' },
+  PARENT_STUDENT: { icon: Bell, color: 'bg-cyan-500/10 text-cyan-600' },
+  ANNOUNCEMENT: { icon: Megaphone, color: 'bg-orange-500/10 text-orange-600' },
 }
 
 export function NotificationsPage() {
-  const [notifications, setNotifications] = useState(mockNotifications)
+  const { notifications, unreadCount, isLoading, markAsRead, markAllAsRead } = useNotifications()
   const [filter, setFilter] = useState<'all' | 'unread'>('all')
 
-  const unreadCount = notifications.filter((n) => !n.read).length
-
   const filtered = filter === 'unread'
-    ? notifications.filter((n) => !n.read)
+    ? notifications.filter((n) => !n.isRead)
     : notifications
-
-  const markAllRead = () => {
-    setNotifications((prev) => prev.map((n) => ({ ...n, read: true })))
-  }
-
-  const markRead = (id: string) => {
-    setNotifications((prev) =>
-      prev.map((n) => (n.id === id ? { ...n, read: true } : n))
-    )
-  }
 
   return (
     <div className="space-y-6">
@@ -53,7 +44,13 @@ export function NotificationsPage() {
           {unreadCount > 0 && (
             <Badge variant="destructive">{unreadCount} unread</Badge>
           )}
-          <Button variant="outline" size="sm" className="gap-2" onClick={markAllRead}>
+          <Button
+            variant="outline"
+            size="sm"
+            className="gap-2"
+            onClick={() => markAllAsRead()}
+            disabled={unreadCount === 0}
+          >
             <CheckCheck className="h-4 w-4" />
             Mark all read
           </Button>
@@ -68,7 +65,13 @@ export function NotificationsPage() {
       </Tabs>
 
       <div className="space-y-3">
-        {filtered.length === 0 ? (
+        {isLoading ? (
+          <Card>
+            <CardContent className="flex flex-col items-center py-12 text-center">
+              <p className="text-sm text-muted-foreground">Loading notifications...</p>
+            </CardContent>
+          </Card>
+        ) : filtered.length === 0 ? (
           <Card>
             <CardContent className="flex flex-col items-center py-12 text-center">
               <Bell className="mb-4 h-12 w-12 text-muted-foreground" />
@@ -91,9 +94,9 @@ export function NotificationsPage() {
                 <Card
                   className={cn(
                     'cursor-pointer transition-all hover:shadow-md',
-                    !notification.read && 'border-primary/30 bg-primary/5'
+                    !notification.isRead && 'border-primary/30 bg-primary/5'
                   )}
-                  onClick={() => markRead(notification.id)}
+                  onClick={() => !notification.isRead && markAsRead(notification.id)}
                 >
                   <CardContent className="flex items-start gap-4 p-4">
                     <div className={cn('flex h-10 w-10 shrink-0 items-center justify-center rounded-xl', config.color)}>
@@ -101,10 +104,10 @@ export function NotificationsPage() {
                     </div>
                     <div className="flex-1 min-w-0">
                       <div className="flex items-start justify-between gap-2">
-                        <p className={cn('text-sm', !notification.read && 'font-semibold')}>
+                        <p className={cn('text-sm', !notification.isRead && 'font-semibold')}>
                           {notification.title}
                         </p>
-                        {!notification.read && (
+                        {!notification.isRead && (
                           <span className="mt-1.5 h-2 w-2 shrink-0 rounded-full bg-primary" />
                         )}
                       </div>
